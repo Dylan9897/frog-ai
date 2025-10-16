@@ -568,21 +568,17 @@
             }
         }
 
-        // 显示/隐藏上传表单（弹窗）
-        const modalMask = document.getElementById('modalMask');
+        // 显示/隐藏上传表单
         uploadToggleBtn.addEventListener('click', () => {
-            uploadForm.classList.add('show');
-            modalMask.classList.add('show');
+            uploadForm.classList.toggle('show');
         });
 
         function closeUploadModal() {
             uploadForm.classList.remove('show');
-            modalMask.classList.remove('show');
             voiceUploadForm.reset();
             fileName.textContent = '';
         }
         cancelUploadBtn.addEventListener('click', closeUploadModal);
-        modalMask.addEventListener('click', closeUploadModal);
 
         // 文件选择事件
         audioFileInput.addEventListener('change', (e) => {
