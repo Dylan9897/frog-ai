@@ -262,6 +262,35 @@
             border-color: #c3e6cb;
         }
 
+        /* 麦克风权限弹窗 */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            width: 420px;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+            overflow: hidden;
+        }
+        .modal-header {
+            padding: 14px 18px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            font-weight: 600;
+        }
+        .modal-body { padding: 16px 18px; color: #374151; line-height: 1.55; }
+        .modal-actions { padding: 12px 18px; display: flex; gap: 10px; justify-content: flex-end; }
+        .btn { padding: 8px 14px; border-radius: 8px; border: 1px solid #e5e7eb; background: #f9fafb; cursor: pointer; }
+        .btn.primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border: none; }
+
         @keyframes slideIn {
             from {
                 opacity: 0;
@@ -337,6 +366,22 @@
     </div>
 
     <div id="alert" class="alert"></div>
+
+    <!-- 麦克风权限弹窗 -->
+    <div class="modal-overlay" id="micModal">
+        <div class="modal">
+            <div class="modal-header">需要麦克风权限</div>
+            <div class="modal-body">
+                为了进行语音识别，请允许浏览器访问麦克风。
+                点击“允许并开始”后，浏览器将弹出权限请求；请选择“允许”。
+                如未出现弹框，请检查浏览器地址栏左侧的锁形图标中的站点权限设置。
+            </div>
+            <div class="modal-actions">
+                <button class="btn" id="micCancelBtn">取消</button>
+                <button class="btn primary" id="micAllowBtn">允许并开始</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Markdown 渲染库 -->
     <script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"></script>
@@ -559,7 +604,7 @@
         // 返回首页前停止TTS
         function goHome() {
             stopAllSpeech();
-            window.location.href = '/';
+            window.location.href = 'https://117.186.222.46:5000/tianwa';
         }
 
         // 页面加载时自动聚焦输入框
@@ -575,6 +620,12 @@
 
         // ========== ASR 实时转录功能 ==========
         
+        // 计算 ASR WebSocket 地址（支持 HTTPS 部署与本地调试）
+        function getAsrWsUrl() {
+            // 固定到你提供的地址（HTTPS/WSS）
+            return 'wss://117.186.222.46:5001/ws';
+        }
+
         // 初始化 ASR WebSocket 连接
         async function initASRWebSocket() {
             if (asrWebSocket && asrWebSocket.readyState === WebSocket.OPEN) {
@@ -583,51 +634,70 @@
             
             return new Promise((resolve, reject) => {
                 try {
-                    asrWebSocket = new WebSocket('ws://localhost:5001/ws');
+                    const url = getAsrWsUrl();
+                    asrWebSocket = new WebSocket(url);
                     
                     asrWebSocket.onopen = () => {
                         console.log('[ASR] WebSocket 已连接');
                         resolve(true);
                     };
                     
-                    asrWebSocket.onmessage = (event) => {
-                        try {
-                            const data = JSON.parse(event.data);
+                    asrWebSocket.onmessage = async (event) => {
+                        const handle = (data) => {
                             console.log('[ASR] 收到消息:', data);
-                            
+                            if (!data) return;
                             if (data.type === 'partial') {
-                                // 实时显示部分结果（流式转录）
                                 console.log('[ASR] ✅ 部分结果:', data.text);
                                 updateASRDraft(data.text, false);
-                            } else if (data.type === 'final') {
-                                // 最终结果
+                                return;
+                            }
+                            if (data.type === 'final') {
                                 console.log('[ASR] ✅ 最终结果:', data.text);
                                 updateASRDraft(data.text, true);
-                                // 如果 stop 后正在等待最终结果，则立即按打字流程入列
                                 if (awaitingFinalAfterStop) {
                                     awaitingFinalAfterStop = false;
-                                    const textToSend = data.text || asrFinalText;
-                                    if (textToSend && textToSend.trim()) {
-                                        // 移除临时草稿气泡
+                                    const textToSend = (data.text || asrFinalText || '').trim();
+                                    if (textToSend) {
                                         const draftBubble = document.getElementById('asr-draft-bubble');
                                         if (draftBubble) draftBubble.remove();
                                         asrDraftElement = null;
-                                        // 添加正式用户消息并发送
                                         addMessage(textToSend, true);
                                         sendMessageToLLM(textToSend);
                                     }
                                 }
-                            } else if (data.type === 'error') {
-                                console.error('[ASR] ❌ 错误:', data.message);
-                                showAlert('ASR 错误: ' + data.message);
+                                return;
+                            }
+                            if (data.type === 'error') {
+                                const msg = typeof data.message === 'string' ? data.message : JSON.stringify(data.message || {});
+                                console.error('[ASR] ❌ 错误:', msg);
+                                showAlert('ASR 错误: ' + msg);
+                            }
+                        };
+
+                        try {
+                            if (typeof event.data === 'string') {
+                                try { handle(JSON.parse(event.data)); }
+                                catch { handle({ type: 'partial', text: event.data }); }
+                            } else if (event.data instanceof Blob) {
+                                const text = await event.data.text();
+                                try { handle(JSON.parse(text)); }
+                                catch { handle({ type: 'partial', text }); }
+                            } else if (typeof event.data === 'object') {
+                                handle(event.data);
+                            } else {
+                                console.warn('[ASR] 未知的消息类型:', typeof event.data);
                             }
                         } catch (e) {
-                            console.error('[ASR] ❌ 解析消息失败:', e, event.data);
+                            console.error('[ASR] ❌ 处理消息异常:', e);
                         }
                     };
                     
                     asrWebSocket.onerror = (error) => {
                         console.error('[ASR] WebSocket 错误:', error);
+                        // HTTPS 页面连接 ws:// 会被认为是混合内容而被阻止
+                        if (location.protocol === 'https:') {
+                            showAlert('ASR 连接失败：当前页面为 HTTPS，需要使用 wss:// 并经由反向代理暴露 /asr/ws。请配置 Nginx/网关转发到 5001。');
+                        }
                         reject(error);
                     };
                     
@@ -657,19 +727,27 @@
             
             try {
                 // 获取麦克风权限
+                // 先通过 Permissions API 预检（可选）
+                try {
+                    if (navigator.permissions && navigator.permissions.query) {
+                        const status = await navigator.permissions.query({ name: 'microphone' });
+                        if (status.state === 'denied') {
+                            const ok = await promptMicPermissionAndStart();
+                            if (!ok) return false;
+                        }
+                    }
+                } catch (_) {}
+                
                 mediaStream = await navigator.mediaDevices.getUserMedia({
                     audio: {
                         channelCount: 1,
-                        sampleRate: 16000,
                         echoCancellation: true,
                         noiseSuppression: true
                     }
                 });
                 
                 // 创建音频上下文
-                audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                    sampleRate: 16000
-                });
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
                 
                 const source = audioContext.createMediaStreamSource(mediaStream);
                 
@@ -718,9 +796,57 @@
                 
             } catch (error) {
                 console.error('[ASR] 初始化音频捕获失败:', error);
-                showAlert('无法访问麦克风，请检查浏览器权限设置');
+                // 更明确的权限/设备错误提示
+                const name = error && error.name ? error.name : '';
+                if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+                    const ok = await promptMicPermissionAndStart();
+                    if (!ok) return false;
+                } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+                    showAlert('未检测到可用的麦克风设备，请插入或启用麦克风后重试。');
+                } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+                    showAlert('麦克风正被其他应用占用，请关闭占用麦克风的应用后重试。');
+                } else if (name === 'OverconstrainedError') {
+                    showAlert('麦克风设备不支持当前采集参数，请更换设备或重试。');
+                } else {
+                    showAlert('无法访问麦克风，请检查浏览器与系统的麦克风权限设置。');
+                }
                 return false;
             }
+        }
+
+        // 弹窗引导用户授权并在点击后拉起系统权限请求
+        async function promptMicPermissionAndStart() {
+            const overlay = document.getElementById('micModal');
+            const allowBtn = document.getElementById('micAllowBtn');
+            const cancelBtn = document.getElementById('micCancelBtn');
+
+            return new Promise((resolve) => {
+                const cleanup = () => {
+                    overlay.classList.remove('show');
+                    allowBtn.onclick = null;
+                    cancelBtn.onclick = null;
+                };
+
+                allowBtn.onclick = async () => {
+                    try {
+                        // 点击后真正申请权限
+                        overlay.classList.remove('show');
+                        mediaStream = await navigator.mediaDevices.getUserMedia({
+                            audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+                        });
+                        resolve(true);
+                    } catch (e) {
+                        showAlert('未能获取麦克风权限，请在浏览器地址栏左侧锁图标中手动允许后重试。');
+                        resolve(false);
+                    } finally {
+                        cleanup();
+                    }
+                };
+
+                cancelBtn.onclick = () => { cleanup(); resolve(false); };
+
+                overlay.classList.add('show');
+            });
         }
         
         // 启动 ASR 录音
@@ -909,9 +1035,14 @@
                 spaceKeyDownTime = Date.now();
                 
                 // 设置定时器，1秒后触发 ASR
-                spaceKeyHoldTimer = setTimeout(() => {
+                spaceKeyHoldTimer = setTimeout(async () => {
                     console.log('[ASR] 长按空格触发录音');
-                    startASR();
+                    const ok = await startASR();
+                    if (!ok) {
+                        // 若启动失败（多因权限问题），立即清除等待状态，避免卡住
+                        clearTimeout(spaceKeyHoldTimer);
+                        spaceKeyHoldTimer = null;
+                    }
                 }, SPACE_HOLD_THRESHOLD);
             }
         });
