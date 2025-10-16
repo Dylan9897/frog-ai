@@ -1,9 +1,19 @@
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Frog AI - 主页</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -11,9 +21,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 0;
             padding: 20px;
         }
+
         .container {
             background: white;
             border-radius: 20px;
@@ -21,41 +31,66 @@
             padding: 60px 40px;
             text-align: center;
             max-width: 500px;
+            width: 100%;
         }
+
         h1 {
             color: #333;
             margin-bottom: 20px;
             font-size: 36px;
         }
-        p {
+
+        .subtitle {
             color: #666;
-            margin-bottom: 30px;
+            margin-bottom: 40px;
             font-size: 16px;
             line-height: 1.6;
         }
+
+        .buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+        }
+
         .btn {
-            display: inline-block;
-            padding: 15px 40px;
+            display: block;
+            width: 100%;
+            max-width: 300px;
+            padding: 18px 40px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             text-decoration: none;
-            border-radius: 10px;
+            border-radius: 12px;
             font-size: 18px;
             font-weight: 600;
-            transition: transform 0.2s, box-shadow 0.2s;
-            margin: 10px;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
         }
+
         .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
+        }
+
+        .btn:active {
+            transform: translateY(-1px);
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🐸 Frog AI</h1>
-        <p>欢迎使用 Frog AI 平台<br>集成语音识别、大语言模型和语音合成的AI服务</p>
-        <a href="/tts" class="btn">🎙️ TTS 语音合成</a>
+        <p class="subtitle">
+            欢迎使用 Frog AI 平台<br>
+            集成语音识别、大语言模型和语音合成的AI服务
+        </p>
+        
+        <div class="buttons">
+            <a href="/tianwa" class="btn">🐸 天蛙轻语</a>
+            <a href="/tts" class="btn">🎙️ TTS 语音合成</a>
+        </div>
     </div>
 </body>
 </html>

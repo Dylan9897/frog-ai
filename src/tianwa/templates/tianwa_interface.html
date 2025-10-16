@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>天蛙轻语</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E🐸%3C/text%3E%3C/svg%3E">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 900px;
+            width: 100%;
+            height: 85vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 20px 20px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header .controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .header button {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+
+        .header button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .chat-container {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            display: flex;
+            gap: 12px;
+            max-width: 80%;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+        }
+
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .message.user .message-avatar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .message.assistant .message-avatar {
+            background: #f0f2ff;
+        }
+
+        .message-content {
+            background: #f5f5f5;
+            padding: 12px 16px;
+            border-radius: 12px;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .message.assistant .message-content {
+            background: #f0f2ff;
+            color: #333;
+        }
+        /* Markdown 样式增强 */
+        .message.assistant .message-content h1,
+        .message.assistant .message-content h2,
+        .message.assistant .message-content h3 { margin: 8px 0; }
+        .message.assistant .message-content p { margin: 6px 0; }
+        .message.assistant .message-content ul,
+        .message.assistant .message-content ol { padding-left: 1.2em; margin: 6px 0; }
+        .message.assistant .message-content code { background: #e9ecff; padding: 2px 6px; border-radius: 4px; }
+        .message.assistant .message-content pre { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 10px; overflow: auto; }
+        .message.assistant .message-content pre code { background: transparent; padding: 0; }
+        .message.assistant .message-content blockquote { border-left: 4px solid #c7d2fe; background: #eef2ff; padding: 8px 12px; margin: 8px 0; color: #374151; }
+        .message.assistant .message-content table { border-collapse: collapse; margin: 8px 0; }
+        .message.assistant .message-content table th,
+        .message.assistant .message-content table td { border: 1px solid #e5e7eb; padding: 6px 10px; }
+
+        .input-area {
+            padding: 20px 30px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-box {
+            flex: 1;
+            display: flex;
+            gap: 10px;
+            background: #f5f5f5;
+            border-radius: 12px;
+            padding: 8px 12px;
+        }
+
+        .input-box textarea {
+            flex: 1;
+            border: none;
+            background: transparent;
+            resize: none;
+            font-size: 15px;
+            font-family: inherit;
+            outline: none;
+            padding: 8px;
+            max-height: 120px;
+        }
+
+        .send-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 24px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .typing-indicator {
+            display: none;
+            align-self: flex-start;
+            background: #f0f2ff;
+            padding: 12px 20px;
+            border-radius: 12px;
+            gap: 8px;
+        }
+
+        .typing-indicator.show {
+            display: flex;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #667eea;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+
+        .alert {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: none;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert.success {
+            background: #d4edda;
+            color: #155724;
+            border-color: #c3e6cb;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(100px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* 滚动条样式 */
+        .chat-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chat-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <span>🐸</span>
+                <span>天蛙轻语</span>
+            </h1>
+            <div class="controls">
+                <button onclick="clearChat()">清空对话</button>
+                <button onclick="goHome()">返回首页</button>
+            </div>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="message assistant">
+                <div class="message-avatar">🐸</div>
+                <div class="message-content">
+                    你好！我是天蛙轻语。请直接输入你的问题。
+                </div>
+            </div>
+        </div>
+
+        <div class="typing-indicator" id="typingIndicator">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+        </div>
+
+        <div class="input-area">
+            <div class="input-box">
+                <textarea 
+                    id="userInput" 
+                    placeholder="输入你的问题..." 
+                    rows="1"
+                    onkeydown="handleKeyDown(event)"
+                ></textarea>
+            </div>
+            <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                发送
+            </button>
+        </div>
+    </div>
+
+    <div id="alert" class="alert"></div>
+
+    <!-- Markdown 渲染库 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+
+    <script>
+        let sessionId = generateSessionId();
+        let isSpeaking = false;
+        let currentUtterances = [];
+
+        function generateSessionId() {
+            return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function showAlert(message, type = 'error') {
+            const alertBox = document.getElementById('alert');
+            alertBox.textContent = message;
+            alertBox.className = `alert ${type} show`;
+            setTimeout(() => {
+                alertBox.classList.remove('show');
+            }, 3000);
+        }
+
+        function addMessage(content, isUser = false) {
+            const chatContainer = document.getElementById('chatContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+            
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = isUser ? '👤' : '🐸';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(contentDiv);
+            chatContainer.appendChild(messageDiv);
+            
+            // 滚动到底部
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            return contentDiv;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const sendBtn = document.getElementById('sendBtn');
+            const typingIndicator = document.getElementById('typingIndicator');
+            
+            const message = input.value.trim();
+            if (!message) return;
+            
+            // 添加用户消息
+            addMessage(message, true);
+            input.value = '';
+            
+            // 禁用发送按钮
+            sendBtn.disabled = true;
+            typingIndicator.classList.add('show');
+            
+            try {
+                const response = await fetch('/api/tianwa/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        message: message
+                    })
+                });
+                
+                const data = await response.json();
+                
+                typingIndicator.classList.remove('show');
+                
+                if (data.success) {
+                    // 使用 Markdown 渲染助手消息
+                    addAssistantMarkdown(data.reply || '');
+                } else {
+                    showAlert(data.error || '发生错误，请重试');
+                }
+            } catch (error) {
+                typingIndicator.classList.remove('show');
+                showAlert('网络错误: ' + error.message);
+            } finally {
+                sendBtn.disabled = false;
+            }
+        }
+
+        // 停止所有 TTS 播报
+        function stopAllSpeech() {
+            if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+            }
+            currentUtterances = [];
+            isSpeaking = false;
+            updateSendButton(false);
+        }
+
+        // 更新发送/停止按钮状态
+        function updateSendButton(speaking) {
+            const sendBtn = document.getElementById('sendBtn');
+            const input = document.getElementById('userInput');
+            if (speaking) {
+                sendBtn.textContent = '停止';
+                sendBtn.onclick = stopAllSpeech;
+                input.disabled = true;
+                input.style.opacity = '0.6';
+            } else {
+                sendBtn.textContent = '发送';
+                sendBtn.onclick = () => sendMessage();
+                input.disabled = false;
+                input.style.opacity = '1';
+            }
+        }
+
+        // 渲染助手 Markdown 并朗读
+        function addAssistantMarkdown(markdownText) {
+            const chatContainer = document.getElementById('chatContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant';
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = '🐸';
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            
+            try {
+                const html = DOMPurify.sanitize(marked.parse(String(markdownText || '')));
+                contentDiv.innerHTML = html;
+            } catch (e) {
+                contentDiv.textContent = markdownText || '';
+            }
+            
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(contentDiv);
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            // TTS 朗读（提取纯文本）
+            speakText(contentDiv.textContent || markdownText || '');
+            
+            return contentDiv;
+        }
+
+        // TTS 朗读文本
+        function speakText(text) {
+            if (!text || !window.speechSynthesis) return;
+            
+            isSpeaking = true;
+            updateSendButton(true);
+            
+            // 分句朗读
+            const sentences = text.match(/[^。！？.!?]+[。！？.!?]*/g) || [text];
+            
+            sentences.forEach((sentence, index) => {
+                const utterance = new SpeechSynthesisUtterance(sentence.trim());
+                utterance.lang = 'zh-CN';
+                utterance.rate = 1.0;
+                
+                if (index === sentences.length - 1) {
+                    utterance.onend = () => {
+                        isSpeaking = false;
+                        updateSendButton(false);
+                    };
+                }
+                
+                utterance.onerror = () => {
+                    isSpeaking = false;
+                    updateSendButton(false);
+                };
+                
+                currentUtterances.push(utterance);
+                window.speechSynthesis.speak(utterance);
+            });
+        }
+
+        function clearChat() {
+            if (confirm('确定要清空对话吗？')) {
+                // 停止TTS播报
+                stopAllSpeech();
+                
+                // 重新生成 session ID
+                sessionId = generateSessionId();
+                
+                // 清空聊天容器
+                const chatContainer = document.getElementById('chatContainer');
+                chatContainer.innerHTML = '';
+                
+                // 添加欢迎消息
+                addMessage('你好！我是天蛙轻语。请直接输入你的问题。');
+                
+                showAlert('对话已清空', 'success');
+            }
+        }
+
+        // 返回首页前停止TTS
+        function goHome() {
+            stopAllSpeech();
+            window.location.href = '/';
+        }
+
+        // 页面加载时自动聚焦输入框
+        window.addEventListener('load', () => {
+            document.getElementById('userInput').focus();
+        });
+
+        // 关闭网页时停止所有服务
+        window.addEventListener('beforeunload', () => {
+            stopAllSpeech();
+        });
+
+        // 已禁用浏览器麦克风/ASR逻辑，仅保留文本输入
+    </script>
+</body>
+</html>
+

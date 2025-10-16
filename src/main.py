@@ -8,10 +8,22 @@ from jinja2 import ChoiceLoader, FileSystemLoader
 
 # 配置 Flask 支持多模板目录
 app = Flask(__name__)
+# 使用绝对路径，避免运行目录引起的模板解析混淆
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+TEMPLATES_DIR = os.path.join(PROJECT_ROOT, 'templates')
+TTS_TEMPLATES_DIR = os.path.join(PROJECT_ROOT, 'tts', 'templates')
+TIANWA_TEMPLATES_DIR = os.path.join(PROJECT_ROOT, 'tianwa', 'templates')
 app.jinja_loader = ChoiceLoader([
-    FileSystemLoader('templates'),           # 主模板目录
-    FileSystemLoader('tts/templates')        # TTS 模块模板目录
+    FileSystemLoader(TEMPLATES_DIR),           # 主模板目录
+    FileSystemLoader(TTS_TEMPLATES_DIR),       # TTS 模块模板目录
+    FileSystemLoader(TIANWA_TEMPLATES_DIR)     # 天蛙模块模板目录
 ])
+# 启动时打印实际解析到的模板路径
+try:
+    _idx_tpl = app.jinja_env.get_or_select_template('index.html')
+    print(f"[Template] index.html -> {_idx_tpl.filename}")
+except Exception as _e:
+    print(f"[Template] index.html 解析失败: {_e}")
 
 # Disable template caching during dev and add global no-cache headers
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
@@ -59,7 +71,17 @@ def add_no_cache_headers(response):
 @app.route('/')
 def index():
     """主页"""
-    return render_template('index.html')
+    # 直接读取磁盘上的模板文件，避免任何模板缓存或路径混淆
+    try:
+        index_path = os.path.join(TEMPLATES_DIR, 'index.html')
+        with open(index_path, 'r', encoding='utf-8') as f:
+            html = f.read()
+        response = make_response(html)
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        return response
+    except Exception as e:
+        # 回退到常规渲染
+        return render_template('index.html')
 
 
 @app.route('/tts')
@@ -72,6 +94,40 @@ def tts_interface():
     response = make_response(html)
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     return response
+
+
+@app.route('/tianwa')
+def tianwa_interface():
+    """天蛙 AI 助手界面"""
+    return render_template('tianwa_interface.html')
+
+
+@app.route('/api/tianwa/chat', methods=['POST'])
+def tianwa_chat():
+    """天蛙对话接口"""
+    try:
+        from tianwa.tianwa_service import get_tianwa_service
+        
+        data = request.json
+        session_id = data.get('session_id')
+        message = data.get('message')
+        
+        if not session_id or not message:
+            return jsonify({'success': False, 'error': '缺少必要参数'}), 400
+        
+        # 获取天蛙服务
+        service = get_tianwa_service()
+        
+        # 调用对话接口
+        result = service.chat(session_id, message, stream=False)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"[天蛙错误] {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'服务错误: {str(e)}'}), 500
 
 
 @app.route('/favicon.ico')
@@ -250,6 +306,7 @@ if __name__ == '__main__':
     print("=" * 60)
     print(f"主页地址: http://localhost:5000")
     print(f"TTS界面: http://localhost:5000/tts")
+    print(f"天蛙助手: http://localhost:5000/tianwa")
     print(f"TTS服务地址: {DEFAULT_TTS_SERVICE_URL}")
     print("=" * 60)
     app.run(host='0.0.0.0', port=5000, debug=True)
