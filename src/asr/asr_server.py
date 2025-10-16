@@ -35,6 +35,7 @@ async def websocket_asr(websocket: WebSocket):
     print("[ASR WebSocket] 客户端已连接")
     
     asr_service = None
+    loop = asyncio.get_event_loop()
     
     try:
         # 创建 ASR 服务
@@ -47,6 +48,7 @@ async def websocket_asr(websocket: WebSocket):
                     'type': 'partial',
                     'text': text
                 }, ensure_ascii=False))
+                print(f"[ASR] 发送部分结果: {text[:50]}...")
             except Exception as e:
                 print(f"[ASR] 发送部分结果失败: {e}")
         
@@ -56,6 +58,7 @@ async def websocket_asr(websocket: WebSocket):
                     'type': 'final',
                     'text': text
                 }, ensure_ascii=False))
+                print(f"[ASR] 发送最终结果: {text}")
             except Exception as e:
                 print(f"[ASR] 发送最终结果失败: {e}")
         
@@ -68,15 +71,30 @@ async def websocket_asr(websocket: WebSocket):
             except Exception as e:
                 print(f"[ASR] 发送错误消息失败: {e}")
         
-        # 创建同步到异步的包装器
+        # WebSocket 状态标志
+        ws_active = True
+        
+        # 创建线程安全的回调包装器
         def sync_on_partial(text: str):
-            asyncio.create_task(on_partial(text))
+            if ws_active:
+                try:
+                    asyncio.run_coroutine_threadsafe(on_partial(text), loop)
+                except Exception as e:
+                    print(f"[ASR] 调度 partial 回调失败: {e}")
         
         def sync_on_final(text: str):
-            asyncio.create_task(on_final(text))
+            if ws_active:
+                try:
+                    asyncio.run_coroutine_threadsafe(on_final(text), loop)
+                except Exception as e:
+                    print(f"[ASR] 调度 final 回调失败: {e}")
         
         def sync_on_error(error_msg: str):
-            asyncio.create_task(on_error(error_msg))
+            if ws_active:
+                try:
+                    asyncio.run_coroutine_threadsafe(on_error(error_msg), loop)
+                except Exception as e:
+                    print(f"[ASR] 调度 error 回调失败: {e}")
         
         # 启动识别
         asr_service.start_recognition(
@@ -99,7 +117,21 @@ async def websocket_asr(websocket: WebSocket):
                         audio_bytes = base64.b64decode(audio_b64)
                         asr_service.send_audio(audio_bytes)
                     elif data.get('type') == 'stop':
-                        print("[ASR WebSocket] 收到停止信号")
+                        print("[ASR WebSocket] 收到停止信号，准备结束识别并发送最终结果…")
+                        # 优雅停止识别，等待最终结果回调发送完成
+                        try:
+                            asr_service.stop_recognition()
+                        except Exception as e:
+                            print(f"[ASR] stop_recognition 出错: {e}")
+                        # 等待回调线程把最终结果通过 websocket 发送出去
+                        await asyncio.sleep(0.8)
+                        # 关闭前阻止继续发送
+                        ws_active = False
+                        try:
+                            await websocket.close()
+                        except Exception:
+                            pass
+                        print("[ASR WebSocket] 已关闭连接")
                         break
                 except json.JSONDecodeError:
                     # 兼容直接发送 base64 字符串的情况
@@ -119,6 +151,9 @@ async def websocket_asr(websocket: WebSocket):
         traceback.print_exc()
     
     finally:
+        # 标记 WebSocket 为非活动状态
+        ws_active = False
+        
         # 清理
         if asr_service:
             asr_service.stop_recognition()

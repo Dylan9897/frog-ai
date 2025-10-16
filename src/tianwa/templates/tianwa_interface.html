@@ -298,7 +298,7 @@
         <div class="header">
             <h1>
                 <span>🐸</span>
-                <span>天蛙轻语</span>
+                <span>不要蕉绿</span>
             </h1>
             <div class="controls">
                 <button onclick="clearChat()">清空对话</button>
@@ -310,7 +310,7 @@
             <div class="message assistant">
                 <div class="message-avatar">🐸</div>
                 <div class="message-content">
-                    你好！我是天蛙轻语。请直接输入你的问题。
+                    你好！我是不要蕉绿🐸。长按空格键1秒开始语音输入，松开结束；或直接输入文字。
                 </div>
             </div>
         </div>
@@ -325,7 +325,7 @@
             <div class="input-box">
                 <textarea 
                     id="userInput" 
-                    placeholder="输入你的问题..." 
+                    placeholder="长按空格1秒语音输入，或直接输入文字..." 
                     rows="1"
                     onkeydown="handleKeyDown(event)"
                 ></textarea>
@@ -346,6 +346,19 @@
         let sessionId = generateSessionId();
         let isSpeaking = false;
         let currentUtterances = [];
+        
+        // ASR 相关变量
+        let asrWebSocket = null;
+        let audioContext = null;
+        let mediaStream = null;
+        let audioWorkletNode = null;
+        let isRecording = false;
+        let spaceKeyDownTime = null;
+        let spaceKeyHoldTimer = null;
+        let asrDraftElement = null;
+        let asrFinalText = ''; // 存储最终的 ASR 结果
+        let awaitingFinalAfterStop = false; // stop 后等待最终结果
+        const SPACE_HOLD_THRESHOLD = 1000; // 长按1秒触发
 
         function generateSessionId() {
             return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -537,7 +550,7 @@
                 chatContainer.innerHTML = '';
                 
                 // 添加欢迎消息
-                addMessage('你好！我是天蛙轻语。请直接输入你的问题。');
+                addMessage('你好！我是不要焦虑🐸。长按空格键1秒开始语音输入，松开结束；或直接输入文字。');
                 
                 showAlert('对话已清空', 'success');
             }
@@ -557,9 +570,370 @@
         // 关闭网页时停止所有服务
         window.addEventListener('beforeunload', () => {
             stopAllSpeech();
+            stopASR();
         });
 
-        // 已禁用浏览器麦克风/ASR逻辑，仅保留文本输入
+        // ========== ASR 实时转录功能 ==========
+        
+        // 初始化 ASR WebSocket 连接
+        async function initASRWebSocket() {
+            if (asrWebSocket && asrWebSocket.readyState === WebSocket.OPEN) {
+                return true;
+            }
+            
+            return new Promise((resolve, reject) => {
+                try {
+                    asrWebSocket = new WebSocket('ws://localhost:5001/ws');
+                    
+                    asrWebSocket.onopen = () => {
+                        console.log('[ASR] WebSocket 已连接');
+                        resolve(true);
+                    };
+                    
+                    asrWebSocket.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            console.log('[ASR] 收到消息:', data);
+                            
+                            if (data.type === 'partial') {
+                                // 实时显示部分结果（流式转录）
+                                console.log('[ASR] ✅ 部分结果:', data.text);
+                                updateASRDraft(data.text, false);
+                            } else if (data.type === 'final') {
+                                // 最终结果
+                                console.log('[ASR] ✅ 最终结果:', data.text);
+                                updateASRDraft(data.text, true);
+                                // 如果 stop 后正在等待最终结果，则立即按打字流程入列
+                                if (awaitingFinalAfterStop) {
+                                    awaitingFinalAfterStop = false;
+                                    const textToSend = data.text || asrFinalText;
+                                    if (textToSend && textToSend.trim()) {
+                                        // 移除临时草稿气泡
+                                        const draftBubble = document.getElementById('asr-draft-bubble');
+                                        if (draftBubble) draftBubble.remove();
+                                        asrDraftElement = null;
+                                        // 添加正式用户消息并发送
+                                        addMessage(textToSend, true);
+                                        sendMessageToLLM(textToSend);
+                                    }
+                                }
+                            } else if (data.type === 'error') {
+                                console.error('[ASR] ❌ 错误:', data.message);
+                                showAlert('ASR 错误: ' + data.message);
+                            }
+                        } catch (e) {
+                            console.error('[ASR] ❌ 解析消息失败:', e, event.data);
+                        }
+                    };
+                    
+                    asrWebSocket.onerror = (error) => {
+                        console.error('[ASR] WebSocket 错误:', error);
+                        reject(error);
+                    };
+                    
+                    asrWebSocket.onclose = () => {
+                        console.log('[ASR] WebSocket 已关闭');
+                        asrWebSocket = null;
+                    };
+                    
+                    // 超时处理
+                    setTimeout(() => {
+                        if (!asrWebSocket || asrWebSocket.readyState !== WebSocket.OPEN) {
+                            reject(new Error('WebSocket 连接超时'));
+                        }
+                    }, 5000);
+                    
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+        
+        // 初始化音频捕获
+        async function initAudioCapture() {
+            if (audioContext && mediaStream) {
+                return true;
+            }
+            
+            try {
+                // 获取麦克风权限
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        channelCount: 1,
+                        sampleRate: 16000,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    }
+                });
+                
+                // 创建音频上下文
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 16000
+                });
+                
+                const source = audioContext.createMediaStreamSource(mediaStream);
+                
+                // 使用 ScriptProcessorNode（兼容性更好）
+                const processor = audioContext.createScriptProcessor(4096, 1, 1);
+                
+                processor.onaudioprocess = (e) => {
+                    if (!isRecording || !asrWebSocket || asrWebSocket.readyState !== WebSocket.OPEN) {
+                        return;
+                    }
+                    
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    
+                    // 转换为 PCM Int16
+                    const pcmData = new Int16Array(inputData.length);
+                    for (let i = 0; i < inputData.length; i++) {
+                        const s = Math.max(-1, Math.min(1, inputData[i]));
+                        pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    }
+                    
+                    // 发送到 WebSocket
+                    try {
+                        const base64Audio = btoa(
+                            String.fromCharCode.apply(null, new Uint8Array(pcmData.buffer))
+                        );
+                        asrWebSocket.send(JSON.stringify({
+                            type: 'audio',
+                            data: base64Audio
+                        }));
+                        // 每100帧打印一次日志，避免刷屏
+                        if (Math.random() < 0.01) {
+                            console.log('[ASR] 📤 发送音频数据，大小:', base64Audio.length);
+                        }
+                    } catch (err) {
+                        console.error('[ASR] ❌ 发送音频数据失败:', err);
+                    }
+                };
+                
+                source.connect(processor);
+                processor.connect(audioContext.destination);
+                
+                // 保存 processor 以便后续清理
+                window.audioProcessor = processor;
+                
+                return true;
+                
+            } catch (error) {
+                console.error('[ASR] 初始化音频捕获失败:', error);
+                showAlert('无法访问麦克风，请检查浏览器权限设置');
+                return false;
+            }
+        }
+        
+        // 启动 ASR 录音
+        async function startASR() {
+            if (isRecording) return;
+            
+            try {
+                // 初始化 WebSocket
+                const wsReady = await initASRWebSocket();
+                if (!wsReady) {
+                    showAlert('ASR 服务连接失败，请确认服务已启动');
+                    return;
+                }
+                
+                // 初始化音频捕获
+                const audioReady = await initAudioCapture();
+                if (!audioReady) {
+                    return;
+                }
+                
+                isRecording = true;
+                
+                // 创建草稿气泡
+                createASRDraft();
+                
+                console.log('[ASR] ✅ 开始录音，WebSocket 状态:', asrWebSocket?.readyState);
+                
+            } catch (error) {
+                console.error('[ASR] 启动失败:', error);
+                showAlert('ASR 启动失败: ' + error.message);
+            }
+        }
+        
+        // 停止 ASR 录音
+        async function stopASR() {
+            if (!isRecording) return;
+            
+            isRecording = false;
+            console.log('[ASR] 🛑 停止录音，当前 asrFinalText:', asrFinalText);
+            
+            // 等待最终结果
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            console.log('[ASR] 等待后的 asrFinalText:', asrFinalText);
+            
+            // 发送停止信号（不要立刻关闭，等待服务端回发最终结果后自行关闭）
+            if (asrWebSocket && asrWebSocket.readyState === WebSocket.OPEN) {
+                try {
+                    asrWebSocket.send(JSON.stringify({ type: 'stop' }));
+                } catch (e) {
+                    console.error('[ASR] 发送 stop 失败:', e);
+                }
+            }
+            
+            // 恢复输入框显示
+            const input = document.getElementById('userInput');
+            input.placeholder = '长按空格1秒语音输入，或直接输入文字...';
+            input.disabled = false;
+            input.style.opacity = '1';
+            
+            // stop 后标记等待最终结果，由 onmessage 的 final 来触发正式入列
+            awaitingFinalAfterStop = true;
+        }
+        
+        // 创建 ASR 草稿气泡
+        function createASRDraft() {
+            if (asrDraftElement) return;
+            
+            // 更新输入框显示"正在录音..."
+            const input = document.getElementById('userInput');
+            input.placeholder = '🎤 正在录音...';
+            input.disabled = true;
+            input.style.opacity = '0.6';
+            
+            const chatContainer = document.getElementById('chatContainer');
+            
+            // 创建用户气泡用于显示 ASR 转录结果
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message user';
+            messageDiv.style.opacity = '0.7';
+            messageDiv.id = 'asr-draft-bubble';
+            
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = '👤';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = '';
+            contentDiv.style.minHeight = '20px';
+            
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(contentDiv);
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            asrDraftElement = contentDiv;
+            asrFinalText = ''; // 重置最终文本
+        }
+        
+        // 更新 ASR 草稿内容
+        function updateASRDraft(text, isFinal = false) {
+            console.log('[ASR] 更新草稿:', { text, isFinal, hasElement: !!asrDraftElement });
+            
+            if (!asrDraftElement) {
+                console.warn('[ASR] ⚠️ asrDraftElement 不存在，无法更新');
+                return;
+            }
+            
+            // 更新气泡中的转录文本
+            if (text && text.trim()) {
+                asrDraftElement.textContent = text;
+                console.log('[ASR] ✅ 已更新气泡文本:', text.substring(0, 50));
+                
+                // 保存最终结果
+                if (isFinal) {
+                    asrFinalText = text;
+                    asrDraftElement.parentElement.style.opacity = '0.9';
+                    console.log('[ASR] ✅ 保存最终结果:', asrFinalText);
+                }
+                
+                // 显示气泡（如果之前是空的）
+                asrDraftElement.parentElement.style.display = 'flex';
+            }
+            
+            // 滚动到底部
+            const chatContainer = document.getElementById('chatContainer');
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        // 发送消息给大模型（从 ASR 调用）
+        async function sendMessageToLLM(message) {
+            const sendBtn = document.getElementById('sendBtn');
+            const typingIndicator = document.getElementById('typingIndicator');
+            
+            // 禁用发送按钮
+            sendBtn.disabled = true;
+            typingIndicator.classList.add('show');
+            
+            try {
+                const response = await fetch('/api/tianwa/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        message: message
+                    })
+                });
+                
+                const data = await response.json();
+                
+                typingIndicator.classList.remove('show');
+                
+                if (data.success) {
+                    // 使用 Markdown 渲染助手消息
+                    addAssistantMarkdown(data.reply || '');
+                } else {
+                    showAlert(data.error || '发生错误，请重试');
+                }
+            } catch (error) {
+                typingIndicator.classList.remove('show');
+                showAlert('网络错误: ' + error.message);
+            } finally {
+                sendBtn.disabled = false;
+            }
+        }
+        
+        // 键盘事件监听
+        document.addEventListener('keydown', (event) => {
+            // 如果正在输入框内打字，不触发 ASR
+            const input = document.getElementById('userInput');
+            if (document.activeElement === input) {
+                return;
+            }
+            
+            // 如果正在播放 TTS，不允许录音
+            if (isSpeaking) {
+                return;
+            }
+            
+            if (event.code === 'Space' && !event.repeat) {
+                event.preventDefault();
+                
+                spaceKeyDownTime = Date.now();
+                
+                // 设置定时器，1秒后触发 ASR
+                spaceKeyHoldTimer = setTimeout(() => {
+                    console.log('[ASR] 长按空格触发录音');
+                    startASR();
+                }, SPACE_HOLD_THRESHOLD);
+            }
+        });
+        
+        document.addEventListener('keyup', (event) => {
+            if (event.code === 'Space') {
+                event.preventDefault();
+                
+                // 清除定时器
+                if (spaceKeyHoldTimer) {
+                    clearTimeout(spaceKeyHoldTimer);
+                    spaceKeyHoldTimer = null;
+                }
+                
+                // 如果正在录音，则停止
+                if (isRecording) {
+                    stopASR();
+                }
+                
+                spaceKeyDownTime = null;
+            }
+        });
     </script>
 </body>
 </html>
