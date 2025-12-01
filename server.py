@@ -1,8 +1,10 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_cors import CORS
 import os
 import mimetypes
+import json
 from agent.file_parser import parse_file
+from agent.chat import get_chat_service
 
 # 初始化 Flask 应用
 app = Flask(__name__)
@@ -190,6 +192,95 @@ def parse_file_endpoint():
     except Exception as e:
         print(f"Error parsing file: {e}")
         return jsonify({"error": f"解析文件时发生错误: {str(e)}"}), 500
+
+
+@app.route('/chat', methods=['POST'])
+def chat_endpoint():
+    """对话接口（流式输出）"""
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id', 'default')
+        message = data.get('message', '')
+        has_attachments = data.get('has_attachments', False)
+        
+        if not message and not has_attachments:
+            return jsonify({"error": "消息内容不能为空"}), 400
+        
+        # 获取对话服务
+        chat_service = get_chat_service()
+        
+        # 如果有附件，直接返回非流式响应
+        if has_attachments:
+            result = chat_service.chat(
+                session_id=session_id,
+                user_message=message or '（仅附件）',
+                stream=False,
+                has_attachments=True
+            )
+            if result.get('success'):
+                return jsonify({
+                    "success": True,
+                    "reply": result.get('reply', ''),
+                    "session_id": result.get('session_id', session_id)
+                }), 200
+            else:
+                return jsonify({
+                    "success": False,
+                    "error": result.get('error', '对话失败')
+                }), 500
+        
+        # 流式输出
+        def generate():
+            try:
+                # 获取会话消息
+                session = chat_service.get_session(session_id)
+                messages = session['messages']
+                
+                # 添加用户消息
+                from dashscope.api_entities.dashscope_response import Role
+                messages.append({'role': Role.USER, 'content': message})
+                
+                # 限制历史对话轮数
+                from agent.chat import MAX_HISTORY_ROUNDS
+                current_rounds = (len(messages) - 1) // 2
+                if current_rounds > MAX_HISTORY_ROUNDS:
+                    excess_rounds = current_rounds - MAX_HISTORY_ROUNDS
+                    messages = [messages[0]] + messages[1 + excess_rounds * 2:]
+                    session['messages'] = messages
+                
+                # 调用流式生成
+                full_reply = ""
+                for chunk in chat_service._chat_stream(messages):
+                    if chunk:
+                        full_reply += chunk
+                        # 发送数据块
+                        yield f"data: {json.dumps({'chunk': chunk, 'done': False}, ensure_ascii=False)}\n\n"
+                
+                # 发送完成信号
+                yield f"data: {json.dumps({'chunk': '', 'done': True, 'full_reply': full_reply}, ensure_ascii=False)}\n\n"
+                
+            except Exception as e:
+                error_msg = f"流式输出错误: {str(e)}"
+                print(error_msg)
+                import traceback
+                traceback.print_exc()
+                yield f"data: {json.dumps({'error': error_msg, 'done': True}, ensure_ascii=False)}\n\n"
+        
+        return Response(
+            stream_with_context(generate()),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no',
+                'Connection': 'keep-alive'
+            }
+        )
+            
+    except Exception as e:
+        print(f"Error in chat endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"对话时发生错误: {str(e)}"}), 500
 
 
 if __name__ == '__main__':

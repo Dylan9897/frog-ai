@@ -60,7 +60,7 @@
            ----------------------- */
         #ai-panel {
             transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, transform 0.4s ease;
-            width: 450px;
+            width: min(40vw, 560px); /* 根据屏幕宽度自适应，最大 560px */
             transform: translateX(0);
         }
 
@@ -76,8 +76,8 @@
         #toggle-handle {
             position: absolute;
             top: 50%;
-            /* 默认位置：面板宽度(450px)处 */
-            right: 450px;
+            /* 把手位置跟随面板宽度 */
+            right: min(40vw, 560px);
             transform: translateY(-50%);
             z-index: 50;
             cursor: pointer;
@@ -134,7 +134,7 @@
                     <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
                         <i class="fa-solid fa-cube mr-2"></i>Sandbox OS
                     </h1>
-                    <p class="text-slate-400 text-sm mt-1">项目 Alpha / 自由视图</p>
+                    <p class="text-slate-300 text-base mt-1">项目 Alpha / 自由视图</p>
                 </div>
                 <div class="flex space-x-4">
                     <button onclick="document.getElementById('global-upload').click()" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm transition shadow-lg shadow-indigo-500/30 flex items-center">
@@ -198,7 +198,7 @@
             <div class="flex gap-3">
                 <div class="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex-shrink-0 flex items-center justify-center text-xs mt-1">AI</div>
                 <div class="flex-1">
-                    <div class="msg-bubble-ai p-3.5 rounded-2xl rounded-tl-none text-slate-300 text-sm leading-relaxed shadow-sm">
+                    <div class="msg-bubble-ai p-4 rounded-2xl rounded-tl-none text-slate-200 text-base leading-relaxed shadow-sm">
                         你好！您可以直接将沙盒中的文件拖给我，或者点击下方按钮上传附件。
                     </div>
                 </div>
@@ -216,7 +216,7 @@
                                <p class="text-[10px] text-slate-400">2.4MB</p>
                            </div>
                     </div>
-                    <div class="msg-bubble-user p-3 rounded-2xl rounded-tr-none text-sm shadow-md">
+                    <div class="msg-bubble-user p-3.5 rounded-2xl rounded-tr-none text-base shadow-md">
                         帮我分析这份文档里的增长趋势。
                     </div>
                 </div>
@@ -653,8 +653,11 @@
         }
 
         // 添加消息到聊天
-        function appendMessage(text, sender, attachments = []) {
+        function appendMessage(text, sender, attachments = [], messageId = null) {
             const messageDiv = document.createElement('div');
+            if (messageId) {
+                messageDiv.id = messageId;
+            }
             messageDiv.className = `flex gap-3 ${sender === 'user' ? 'flex-row-reverse' : ''}`;
             
             if (sender === 'user') {
@@ -681,8 +684,8 @@
                 messageDiv.innerHTML = `
                     <div class="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex-shrink-0 flex items-center justify-center text-xs mt-1">AI</div>
                     <div class="flex-1">
-                        <div class="msg-bubble-ai p-3.5 rounded-2xl rounded-tl-none text-slate-300 text-sm leading-relaxed shadow-sm">
-                            ${text}
+                    <div class="msg-bubble-ai p-4 rounded-2xl rounded-tl-none text-slate-200 text-base leading-relaxed shadow-sm">
+                            ${text || ''}
                         </div>
                     </div>
                 `;
@@ -690,6 +693,19 @@
             
             chatMessages.appendChild(messageDiv);
             scrollToChatBottom();
+            return messageDiv;
+        }
+
+        // 更新消息内容（用于流式输出）
+        function updateMessage(messageId, text) {
+            const messageDiv = document.getElementById(messageId);
+            if (messageDiv) {
+                const contentDiv = messageDiv.querySelector('.msg-bubble-ai');
+                if (contentDiv) {
+                    contentDiv.textContent = text;
+                    scrollToChatBottom();
+                }
+            }
         }
 
         // 滚动到底部
@@ -698,7 +714,7 @@
         }
 
         // 发送消息
-        function sendMessage() {
+        async function sendMessage() {
             // 如果正在解析，不允许发送
             if (isParsing) {
                 return;
@@ -721,22 +737,109 @@
                 showParsingStatus('', 'clear');
             }, 2000);
             
-            // 模拟 AI 回复
-            setTimeout(() => {
+            // 调用后端 API 获取 AI 回复（流式输出）
+            try {
+                // 先创建一个空的 AI 消息框
+                const aiMessageId = `ai-message-${Date.now()}`;
+                appendMessage('', 'ai', [], aiMessageId);
+                
+                let fullReply = '';
+                
+                // 如果有附件，使用普通请求
                 if (attachmentsToSend.length > 0) {
-                    appendMessage(`我已收到您发送的 ${attachmentsToSend.length} 个文件。目前 AI 功能正在开发中，敬请期待！`, 'ai');
+                    const response = await fetch(`${API_BASE}/chat`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            session_id: 'default',
+                            message: message || '（仅附件）',
+                            has_attachments: true
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        updateMessage(aiMessageId, data.reply);
+                    } else {
+                        updateMessage(aiMessageId, `抱歉，发生了错误：${data.error || '未知错误'}`);
+                    }
                 } else {
-                    appendMessage("抱歉，目前 AI 聊天功能尚未连接到实际的语言模型 API。", 'ai');
+                    // 流式输出
+                    const response = await fetch(`${API_BASE}/chat`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            session_id: 'default',
+                            message: message || '（仅附件）',
+                            has_attachments: false
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        
+                        if (done) {
+                            break;
+                        }
+                        
+                        // 解码数据
+                        const chunk = decoder.decode(value, { stream: true });
+                        const lines = chunk.split('\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    
+                                    if (data.error) {
+                                        updateMessage(aiMessageId, `抱歉，发生了错误：${data.error}`);
+                                        return;
+                                    }
+                                    
+                                    if (data.chunk) {
+                                        fullReply += data.chunk;
+                                        updateMessage(aiMessageId, fullReply);
+                                    }
+                                    
+                                    if (data.done) {
+                                        // 流式输出完成
+                                        if (data.full_reply) {
+                                            updateMessage(aiMessageId, data.full_reply);
+                                        }
+                                        return;
+                                    }
+                                } catch (e) {
+                                    console.error('解析流式数据失败:', e);
+                                }
+                            }
+                        }
+                    }
                 }
-            }, 500);
+            } catch (error) {
+                console.error('发送消息失败:', error);
+                const aiMessageId = `ai-message-${Date.now()}`;
+                appendMessage('抱歉，网络连接失败，请检查后端服务是否正常运行。', 'ai', [], aiMessageId);
+            }
         }
 
-        // 聊天上传处理
+        // 聊天上传处理（对话框文件独立，上传到服务器但不显示在沙盒）
         document.getElementById('chat-upload').addEventListener('change', async function() {
             if(this.files.length > 0) {
                 const files = Array.from(this.files);
                 
-                // 先上传文件到服务器
+                // 上传文件到服务器（用于解析），但不显示在沙盒
                 for (const file of files) {
                     const formData = new FormData();
                     formData.append('file', file);
@@ -750,19 +853,21 @@
                         if (response.ok) {
                             // 上传成功后添加到附件列表
                             chatAttachments.push(file);
+                            console.log(`已添加文件到对话附件: ${file.name}`);
                             
                             // 解析文件
                             await parseFile(file.name);
                         } else {
                             console.error(`文件 ${file.name} 上传失败`);
+                            alert(`文件 ${file.name} 上传失败`);
                         }
                     } catch (error) {
                         console.error(`上传文件 ${file.name} 时发生错误:`, error);
+                        alert(`上传文件 ${file.name} 时发生错误: ${error.message}`);
                     }
                 }
                 
-                // 重新加载文件列表
-                await loadFiles();
+                // 注意：不调用 loadFiles()，所以不会在沙盒区域显示
             }
             this.value = ''; // 清空input以便可以重复选择同一文件
         });
@@ -793,24 +898,26 @@
                 const sandboxFilename = e.dataTransfer.getData('application/x-sandbox-file');
                 
                 if (sandboxFilename) {
-                    // 从沙盒拖拽的文件
-                    console.log('从沙盒拖拽文件:', sandboxFilename);
+                    // 从沙盒拖拽的文件（引用沙盒中已有的文件）
+                    console.log('从沙盒拖拽文件到对话框:', sandboxFilename);
                     
-                    // 创建文件对象（模拟）
+                    // 创建文件对象（引用沙盒文件）
                     const file = {
                         name: sandboxFilename,
-                        size: 0 // 实际可以从服务器获取
+                        size: 0, // 实际可以从服务器获取
+                        isSandboxFile: true // 标记为沙盒文件
                     };
                     
                     chatAttachments.push(file);
+                    console.log(`已添加沙盒文件到对话附件: ${sandboxFilename}`);
                     
-                    // 解析文件
+                    // 解析文件（沙盒文件已经在服务器上）
                     await parseFile(sandboxFilename);
                 } else {
-                    // 从电脑拖拽的文件
+                    // 从电脑拖拽的文件（对话框文件，上传到服务器但不显示在沙盒）
                     const files = Array.from(e.dataTransfer.files);
                     if (files.length > 0) {
-                        // 先上传文件到服务器
+                        // 上传文件到服务器（用于解析），但不显示在沙盒
                         for (const file of files) {
                             const formData = new FormData();
                             formData.append('file', file);
@@ -824,6 +931,7 @@
                                 if (response.ok) {
                                     // 上传成功后添加到附件列表
                                     chatAttachments.push(file);
+                                    console.log(`已添加文件到对话附件: ${file.name}`);
                                     
                                     // 解析文件
                                     await parseFile(file.name);
@@ -834,9 +942,7 @@
                                 console.error(`上传文件 ${file.name} 时发生错误:`, error);
                             }
                         }
-                        
-                        // 重新加载文件列表
-                        await loadFiles();
+                        // 注意：不调用 loadFiles()，所以不会在沙盒区域显示
                     }
                 }
             });
