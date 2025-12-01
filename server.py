@@ -3,6 +3,7 @@ from flask_cors import CORS
 import os
 import mimetypes
 import json
+import sys
 from agent.file_parser import parse_file
 from agent.chat import get_chat_service
 
@@ -23,6 +24,35 @@ if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# 配置沙盒文件“快捷方式”目录和 JSON 配置
+SHORTCUT_DIR = 'sandbox_shortcuts'
+if not os.path.exists(SHORTCUT_DIR):
+    os.makedirs(SHORTCUT_DIR)
+
+SHORTCUT_CONFIG_PATH = os.path.join(SHORTCUT_DIR, 'shortcuts.json')
+
+
+def register_shortcut(filename: str, filepath: str):
+    """
+    记录一个“快捷方式”信息到 JSON 文件中，方便后续扩展/集成。
+    实际打开文件时仍然直接使用真实路径（os.startfile）。
+    """
+    try:
+        shortcuts = {}
+        if os.path.exists(SHORTCUT_CONFIG_PATH):
+            with open(SHORTCUT_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                try:
+                    shortcuts = json.load(f) or {}
+                except Exception:
+                    shortcuts = {}
+
+        shortcuts[filename] = os.path.abspath(filepath)
+
+        with open(SHORTCUT_CONFIG_PATH, 'w', encoding='utf-8') as f:
+            json.dump(shortcuts, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"注册快捷方式失败: {e}")
 
 
 # --- 实用函数 ---
@@ -61,6 +91,14 @@ def upload_file():
 
         try:
             file.save(filepath)
+
+            # 记录一份“快捷方式”信息到 JSON（sandbox_shortcuts/shortcuts.json）
+            try:
+                register_shortcut(filename, filepath)
+            except Exception as e:
+                # 不影响主流程，只打印日志
+                print(f"Warning: register_shortcut failed for {filename}: {e}")
+
             # 成功上传，返回 200 OK 和 JSON
             return jsonify({"message": f"File {filename} uploaded successfully", "path": filepath}), 200
         except Exception as e:
@@ -192,6 +230,58 @@ def parse_file_endpoint():
     except Exception as e:
         print(f"Error parsing file: {e}")
         return jsonify({"error": f"解析文件时发生错误: {str(e)}"}), 500
+
+
+@app.route('/open-file', methods=['POST'])
+def open_file():
+    """
+    在服务器本机上用系统默认程序打开指定的沙盒文件。
+    前端只需要传入 filename，双击触发该接口即可。
+    """
+    try:
+        data = request.get_json() or {}
+        filename = data.get('filename')
+
+        if not filename:
+            return jsonify({"error": "filename 不能为空"}), 400
+
+        # 计算文件真实路径，并做安全检查
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        real_path = os.path.abspath(filepath)
+
+        if not real_path.startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
+            return jsonify({"error": "Access denied"}), 403
+
+        if not os.path.exists(real_path):
+            return jsonify({"error": "文件不存在"}), 404
+
+        # 使用系统默认程序打开文件（Windows 上使用 os.startfile）
+        try:
+            if os.name == 'nt':
+                os.startfile(real_path)
+            else:
+                # macOS / Linux 简单兼容处理
+                import subprocess
+                opener = 'open' if sys.platform == 'darwin' else 'xdg-open'
+                subprocess.Popen([opener, real_path])
+        except Exception as e:
+            print(f"Error opening file {real_path}: {e}")
+            return jsonify({"error": f"打开文件失败: {str(e)}"}), 500
+
+        # 同步更新快捷方式 JSON（防止旧数据缺失）
+        try:
+            register_shortcut(filename, real_path)
+        except Exception as e:
+            print(f"Warning: register_shortcut in open_file failed for {filename}: {e}")
+
+        return jsonify({
+            "success": True,
+            "message": f"已尝试用系统默认程序打开文件: {filename}"
+        }), 200
+
+    except Exception as e:
+        print(f"Error in open_file: {e}")
+        return jsonify({"error": f"打开文件时发生错误: {str(e)}"}), 500
 
 
 @app.route('/chat', methods=['POST'])

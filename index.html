@@ -341,7 +341,7 @@
             return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
         }
 
-        // 创建文件卡片（可拖拽）
+        // 创建文件卡片（可拖拽 + 双击打开）
         function createFileCard(filename) {
             const card = document.createElement('div');
             card.className = 'sandbox-card p-6 rounded-2xl flex flex-col justify-between h-56 cursor-pointer group relative';
@@ -359,6 +359,13 @@
             // 拖拽结束
             card.addEventListener('dragend', (e) => {
                 card.style.opacity = '1';
+            });
+
+            // 双击卡片：在本机用系统默认程序打开文件
+            card.addEventListener('dblclick', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openSandboxFile(filename);
             });
             
             card.innerHTML = `
@@ -383,6 +390,29 @@
                 </div>
             `;
             return card;
+        }
+
+        // 调用后端接口，在本机打开沙盒文件
+        async function openSandboxFile(filename) {
+            try {
+                const resp = await fetch(`${API_BASE}/open-file`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ filename })
+                });
+
+                const data = await resp.json();
+
+                if (!resp.ok || !data.success) {
+                    console.error('打开文件失败:', data.error || resp.statusText);
+                    alert(data.error || '打开文件失败，请查看后端日志。');
+                }
+            } catch (error) {
+                console.error('打开文件时发生错误:', error);
+                alert('打开文件时发生错误，请检查后端服务是否正常。');
+            }
         }
 
         // 显示文件菜单
