@@ -253,7 +253,7 @@
                             <i class="fa-solid fa-microphone"></i>
                         </button>
                     </div>
-                    <button id="send-btn" onclick="sendMessage()" class="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg text-sm px-4 transition transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button id="send-btn" onclick="handleSendButtonClick()" class="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg text-sm px-4 transition transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
                         <i class="fa-solid fa-paper-plane"></i>
                     </button>
                 </div>
@@ -607,6 +607,10 @@
         let currentUtterances = [];
         let lastSpokenOffset = 0; // 记录已播报文本的长度（字符位置）
 
+        // 对话流控制相关变量
+        let isAnswering = false;                // 是否正在生成 / 播报
+        let currentChatAbortController = null;  // 当前请求的 AbortController
+
         // 显示文件解析状态（固定在输入框上方）
         function showParsingStatus(filename, status) {
             // status: 'parsing' | 'completed' | 'error' | 'clear'
@@ -764,6 +768,42 @@
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
+        // 发送按钮点击逻辑：在空闲时发送，在回答中时用于“停止生成 + 停止播报”
+        async function handleSendButtonClick() {
+            if (isAnswering) {
+                // 正在生成：点击视为“停止”
+                if (currentChatAbortController) {
+                    try {
+                        currentChatAbortController.abort();
+                    } catch (e) {
+                        console.error('中止对话请求失败:', e);
+                    }
+                    currentChatAbortController = null;
+                }
+                // 停止语音播报
+                stopAllSpeech();
+                isAnswering = false;
+                updateSendButtonVisual();
+                return;
+            }
+            // 空闲状态下，正常发送消息
+            await sendMessage();
+        }
+
+        function updateSendButtonVisual() {
+            const btn = document.getElementById('send-btn');
+            if (!btn) return;
+            if (isAnswering) {
+                btn.innerHTML = '<i class="fa-solid fa-stop"></i>';
+                btn.classList.add('bg-red-600', 'hover:bg-red-500');
+                btn.classList.remove('bg-indigo-600', 'hover:bg-indigo-500');
+            } else {
+                btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i>';
+                btn.classList.add('bg-indigo-600', 'hover:bg-indigo-500');
+                btn.classList.remove('bg-red-600', 'hover:bg-red-500');
+            }
+        }
+
         // 发送消息
         async function sendMessage() {
             // 如果正在解析，不允许发送
@@ -820,12 +860,20 @@
                     payload.attachment_filenames = attachmentsToSend.map(f => f.name);
                 }
 
+                // 标记进入“回答中”状态
+                isAnswering = true;
+                updateSendButtonVisual();
+
+                // 使用 AbortController 支持中途停止生成
+                currentChatAbortController = new AbortController();
+
                 const response = await fetch(`${API_BASE}/chat`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(payload),
+                    signal: currentChatAbortController.signal
                 });
 
                 // 判断是否为流式 SSE
@@ -888,9 +936,18 @@
                     }
                 }
             } catch (error) {
-                console.error('发送消息失败:', error);
-                const aiMessageId = `ai-message-${Date.now()}`;
-                appendMessage('抱歉，网络连接失败，请检查后端服务是否正常运行。', 'ai', [], aiMessageId);
+                if (error.name === 'AbortError') {
+                    console.log('对话请求已被用户中止');
+                } else {
+                    console.error('发送消息失败:', error);
+                    const aiMessageId = `ai-message-${Date.now()}`;
+                    appendMessage('抱歉，网络连接失败，请检查后端服务是否正常运行。', 'ai', [], aiMessageId);
+                }
+            } finally {
+                // 无论成功、失败还是中止，都回到空闲状态
+                isAnswering = false;
+                currentChatAbortController = null;
+                updateSendButtonVisual();
             }
         }
 
@@ -1523,8 +1580,9 @@
         // 页面加载时获取文件列表
         loadFiles();
         
-        // 初始化发送按钮状态
+        // 初始化发送按钮状态与发送按钮样式
         updateSendButtonState();
+        updateSendButtonVisual();
     </script>
 </body>
 </html>
