@@ -100,25 +100,6 @@
             opacity: 1;
         }
 
-        /* --- 新增：对话框拖拽覆盖层 --- */
-        #ai-panel.drag-active::after {
-            content: '释放以发送文件';
-            position: absolute;
-            inset: 20px;
-            border: 2px dashed #6366f1; /* Indigo-500 */
-            background: rgba(15, 23, 42, 0.9);
-            backdrop-filter: blur(4px);
-            border-radius: 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #818cf8;
-            font-size: 1.2rem;
-            font-weight: bold;
-            z-index: 100;
-            pointer-events: none; /* 让事件透传 */
-        }
-
         .msg-bubble-ai { background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid rgba(255, 255, 255, 0.05); }
         .msg-bubble-user { background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; }
 
@@ -194,7 +175,7 @@
             </button>
         </div>
 
-        <div id="chat-messages" class="flex-1 overflow-y-auto p-5 space-y-6 scroll-smooth">
+        <div class="flex-1 overflow-y-auto p-5 space-y-6 scroll-smooth">
             <div class="flex gap-3">
                 <div class="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex-shrink-0 flex items-center justify-center text-xs mt-1">AI</div>
                 <div class="flex-1">
@@ -224,20 +205,10 @@
         </div>
 
         <div class="p-4 bg-slate-900 border-t border-slate-800">
-            <!-- 文件解析状态提示区域（固定在输入框上方） -->
-            <div id="parsing-status-bar" class="hidden mb-3 px-4 py-2.5 rounded-lg border transition-all">
-                <div id="parsing-status-content" class="flex items-center gap-2 text-sm">
-                    <!-- 状态内容将动态插入这里 -->
-                </div>
-            </div>
-            
             <div class="relative bg-slate-800 rounded-2xl border border-slate-700 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition-all">
                 <textarea
-                    id="chat-input"
                     class="w-full bg-transparent text-slate-200 text-sm p-3 pr-12 h-12 max-h-32 focus:outline-none resize-none placeholder-slate-500"
                     placeholder="问点什么..."
-                    onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }"
-                    oninput="this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 128) + 'px';"
                 ></textarea>
                 <div class="flex justify-between items-center px-2 pb-2">
                     <div class="flex gap-1">
@@ -249,7 +220,7 @@
                             <i class="fa-solid fa-microphone"></i>
                         </button>
                     </div>
-                    <button id="send-btn" onclick="sendMessage()" class="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg text-sm px-4 transition transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button class="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg text-sm px-4 transition transform active:scale-95">
                         <i class="fa-solid fa-paper-plane"></i>
                     </button>
                 </div>
@@ -264,8 +235,6 @@
         const handle = document.getElementById('toggle-handle');
         const icon = document.getElementById('toggle-icon');
         const filesGrid = document.getElementById('files-grid');
-        const chatMessages = document.getElementById('chat-messages');
-        const chatInput = document.getElementById('chat-input');
 
         function toggleSidebar() {
             const isCollapsed = panel.classList.contains('collapsed');
@@ -341,26 +310,10 @@
             return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
         }
 
-        // 创建文件卡片（可拖拽）
+        // 创建文件卡片
         function createFileCard(filename) {
             const card = document.createElement('div');
             card.className = 'sandbox-card p-6 rounded-2xl flex flex-col justify-between h-56 cursor-pointer group relative';
-            card.draggable = true; // 启用拖拽
-            card.dataset.filename = filename; // 存储文件名
-            
-            // 拖拽开始
-            card.addEventListener('dragstart', (e) => {
-                e.dataTransfer.effectAllowed = 'copy';
-                e.dataTransfer.setData('text/plain', filename);
-                e.dataTransfer.setData('application/x-sandbox-file', filename);
-                card.style.opacity = '0.5';
-            });
-            
-            // 拖拽结束
-            card.addEventListener('dragend', (e) => {
-                card.style.opacity = '1';
-            });
-            
             card.innerHTML = `
                 <div class="flex justify-between items-start">
                     <div class="w-12 h-12 rounded-xl ${getFileIconColor(filename)} flex items-center justify-center text-2xl">
@@ -379,7 +332,7 @@
                 </div>
                 <div>
                     <h3 class="font-semibold text-lg text-slate-100 truncate" title="${filename}">${filename}</h3>
-                    <p class="text-xs text-slate-400 mt-2">已上传 · 可拖拽到对话框</p>
+                    <p class="text-xs text-slate-400 mt-2">已上传</p>
                 </div>
             `;
             return card;
@@ -552,301 +505,15 @@
             });
         }
 
-        // 聊天消息相关变量
-        let chatAttachments = [];
-        let isParsing = false; // 是否正在解析文件
-
-        // 显示文件解析状态（固定在输入框上方）
-        function showParsingStatus(filename, status) {
-            // status: 'parsing' | 'completed' | 'error' | 'clear'
-            const statusBar = document.getElementById('parsing-status-bar');
-            const statusContent = document.getElementById('parsing-status-content');
-            
-            if (!statusBar || !statusContent) {
-                console.error('解析状态栏元素未找到');
-                return;
-            }
-            
-            // 如果状态是 clear，则隐藏状态栏
-            if (status === 'clear') {
-                statusBar.classList.add('hidden');
-                return;
-            }
-            
-            // 显示状态栏
-            statusBar.classList.remove('hidden');
-            
-            let statusHTML = '';
-            if (status === 'parsing') {
-                // 正在解析：蓝色背景，旋转图标
-                statusBar.className = 'mb-3 px-4 py-2.5 rounded-lg border transition-all bg-indigo-500/10 border-indigo-500/30';
-                statusHTML = `
-                    <i class="fa-solid fa-spinner fa-spin text-indigo-400"></i>
-                    <span class="text-slate-200">正在解析文件: <strong class="text-indigo-300">${filename}</strong></span>
-                `;
-            } else if (status === 'completed') {
-                // 解析完成：绿色背景，对勾图标
-                statusBar.className = 'mb-3 px-4 py-2.5 rounded-lg border transition-all bg-emerald-500/10 border-emerald-500/30';
-                statusHTML = `
-                    <i class="fa-solid fa-check-circle text-emerald-400"></i>
-                    <span class="text-slate-200">文件 <strong class="text-emerald-300">${filename}</strong> 解析完成，可以发送消息了</span>
-                `;
-            } else if (status === 'error') {
-                // 解析失败：红色背景，警告图标
-                statusBar.className = 'mb-3 px-4 py-2.5 rounded-lg border transition-all bg-red-500/10 border-red-500/30';
-                statusHTML = `
-                    <i class="fa-solid fa-exclamation-circle text-red-400"></i>
-                    <span class="text-slate-200">文件 <strong class="text-red-300">${filename}</strong> 解析失败</span>
-                `;
-            }
-            
-            statusContent.innerHTML = statusHTML;
-        }
-
-        // 解析文件
-        async function parseFile(filename) {
-            isParsing = true;
-            updateSendButtonState();
-            
-            // 显示正在解析状态
-            showParsingStatus(filename, 'parsing');
-            
-            try {
-                const response = await fetch(`${API_BASE}/parse-file`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ filename: filename })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    // 显示解析完成状态
-                    showParsingStatus(filename, 'completed');
-                } else {
-                    // 显示解析失败状态
-                    showParsingStatus(filename, 'error');
-                }
-            } catch (error) {
-                console.error('解析文件失败:', error);
-                showParsingStatus(filename, 'error');
-            } finally {
-                isParsing = false;
-                updateSendButtonState();
-            }
-        }
-
-        // 更新发送按钮状态
-        function updateSendButtonState() {
-            const sendBtn = document.getElementById('send-btn');
-            if (sendBtn) {
-                if (isParsing) {
-                    sendBtn.disabled = true;
-                    sendBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                } else {
-                    sendBtn.disabled = false;
-                    sendBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                }
-            }
-        }
-
-        // 添加消息到聊天
-        function appendMessage(text, sender, attachments = []) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `flex gap-3 ${sender === 'user' ? 'flex-row-reverse' : ''}`;
-            
-            if (sender === 'user') {
-                messageDiv.innerHTML = `
-                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" class="w-8 h-8 rounded-full bg-slate-700 flex-shrink-0 mt-1">
-                    <div class="flex flex-col items-end gap-2 max-w-[85%]">
-                        ${attachments.length > 0 ? attachments.map(file => `
-                            <div class="bg-slate-800/80 border border-slate-600/50 p-2 pr-4 rounded-xl flex items-center gap-3 w-auto hover:bg-slate-800 transition cursor-pointer">
-                                <div class="w-10 h-10 rounded ${getFileIconColor(file.name)} flex items-center justify-center">
-                                    <i class="${getFileIcon(file.name)}"></i>
-                                </div>
-                                <div class="text-left">
-                                    <p class="text-xs text-white font-medium">${file.name}</p>
-                                    <p class="text-[10px] text-slate-400">${formatFileSize(file.size)}</p>
-                                </div>
-                            </div>
-                        `).join('') : ''}
-                        ${text ? `<div class="msg-bubble-user p-3 rounded-2xl rounded-tr-none text-sm shadow-md">
-                            ${text}
-                        </div>` : ''}
-                    </div>
-                `;
-            } else {
-                messageDiv.innerHTML = `
-                    <div class="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex-shrink-0 flex items-center justify-center text-xs mt-1">AI</div>
-                    <div class="flex-1">
-                        <div class="msg-bubble-ai p-3.5 rounded-2xl rounded-tl-none text-slate-300 text-sm leading-relaxed shadow-sm">
-                            ${text}
-                        </div>
-                    </div>
-                `;
-            }
-            
-            chatMessages.appendChild(messageDiv);
-            scrollToChatBottom();
-        }
-
-        // 滚动到底部
-        function scrollToChatBottom() {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-
-        // 发送消息
-        function sendMessage() {
-            // 如果正在解析，不允许发送
-            if (isParsing) {
-                return;
-            }
-            
-            const message = chatInput.value.trim();
-            if (!message && chatAttachments.length === 0) return;
-
-            // 添加用户消息
-            appendMessage(message || '（仅附件）', 'user', chatAttachments);
-            
-            // 清空输入和附件
-            chatInput.value = '';
-            chatInput.style.height = 'auto';
-            const attachmentsToSend = [...chatAttachments];
-            chatAttachments = [];
-            
-            // 发送消息后，清除解析状态提示（延迟一下，让用户看到完成状态）
-            setTimeout(() => {
-                showParsingStatus('', 'clear');
-            }, 2000);
-            
-            // 模拟 AI 回复
-            setTimeout(() => {
-                if (attachmentsToSend.length > 0) {
-                    appendMessage(`我已收到您发送的 ${attachmentsToSend.length} 个文件。目前 AI 功能正在开发中，敬请期待！`, 'ai');
-                } else {
-                    appendMessage("抱歉，目前 AI 聊天功能尚未连接到实际的语言模型 API。", 'ai');
-                }
-            }, 500);
-        }
-
         // 聊天上传处理
-        document.getElementById('chat-upload').addEventListener('change', async function() {
+        document.getElementById('chat-upload').addEventListener('change', function() {
             if(this.files.length > 0) {
-                const files = Array.from(this.files);
-                
-                // 先上传文件到服务器
-                for (const file of files) {
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    
-                    try {
-                        const response = await fetch(`${API_BASE}/upload`, {
-                            method: 'POST',
-                            body: formData
-                        });
-                        
-                        if (response.ok) {
-                            // 上传成功后添加到附件列表
-                            chatAttachments.push(file);
-                            
-                            // 解析文件
-                            await parseFile(file.name);
-                        } else {
-                            console.error(`文件 ${file.name} 上传失败`);
-                        }
-                    } catch (error) {
-                        console.error(`上传文件 ${file.name} 时发生错误:`, error);
-                    }
-                }
-                
-                // 重新加载文件列表
-                await loadFiles();
+                alert(`已准备发送附件: ${this.files[0].name}`);
             }
-            this.value = ''; // 清空input以便可以重复选择同一文件
         });
-
-        // AI 面板拖拽上传功能
-        if (panel) {
-            panel.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                panel.classList.add('drag-active');
-            });
-
-            panel.addEventListener('dragleave', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                // 只有当离开面板区域时才移除样式
-                if (!panel.contains(e.relatedTarget)) {
-                    panel.classList.remove('drag-active');
-                }
-            });
-
-            panel.addEventListener('drop', async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                panel.classList.remove('drag-active');
-
-                // 检查是否是沙盒文件拖拽
-                const sandboxFilename = e.dataTransfer.getData('application/x-sandbox-file');
-                
-                if (sandboxFilename) {
-                    // 从沙盒拖拽的文件
-                    console.log('从沙盒拖拽文件:', sandboxFilename);
-                    
-                    // 创建文件对象（模拟）
-                    const file = {
-                        name: sandboxFilename,
-                        size: 0 // 实际可以从服务器获取
-                    };
-                    
-                    chatAttachments.push(file);
-                    
-                    // 解析文件
-                    await parseFile(sandboxFilename);
-                } else {
-                    // 从电脑拖拽的文件
-                    const files = Array.from(e.dataTransfer.files);
-                    if (files.length > 0) {
-                        // 先上传文件到服务器
-                        for (const file of files) {
-                            const formData = new FormData();
-                            formData.append('file', file);
-                            
-                            try {
-                                const response = await fetch(`${API_BASE}/upload`, {
-                                    method: 'POST',
-                                    body: formData
-                                });
-                                
-                                if (response.ok) {
-                                    // 上传成功后添加到附件列表
-                                    chatAttachments.push(file);
-                                    
-                                    // 解析文件
-                                    await parseFile(file.name);
-                                } else {
-                                    console.error(`文件 ${file.name} 上传失败`);
-                                }
-                            } catch (error) {
-                                console.error(`上传文件 ${file.name} 时发生错误:`, error);
-                            }
-                        }
-                        
-                        // 重新加载文件列表
-                        await loadFiles();
-                    }
-                }
-            });
-        }
 
         // 页面加载时获取文件列表
         loadFiles();
-        
-        // 初始化发送按钮状态
-        updateSendButtonState();
     </script>
 </body>
 </html>

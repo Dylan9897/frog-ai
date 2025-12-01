@@ -2,11 +2,18 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import mimetypes
+from agent.file_parser import parse_file
 
 # 初始化 Flask 应用
 app = Flask(__name__)
-# 允许跨域请求
-CORS(app)
+# 允许跨域请求 - 配置更详细的 CORS 选项
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # 配置上传文件夹
 UPLOAD_FOLDER = 'uploads'
@@ -21,7 +28,7 @@ def allowed_file(filename):
     """只允许特定的文件扩展名，防止恶意上传"""
     return '.' in filename and \
         filename.rsplit('.', 1)[1].lower() in {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'py', 'js', 'html', 'css',
-                                               'md', 'json', 'csv', 'xml'}
+                                               'md', 'json', 'csv', 'xml', 'doc', 'docx', 'pptx'}
 
 
 # --- 静态文件和根路由 ---
@@ -69,12 +76,17 @@ def list_files():
         # 过滤掉隐藏文件，并确保列表不为空
         files = [f for f in files if not f.startswith('.')]
 
-        # 返回标准的 JSON 格式，状态码 200
-        return jsonify({"files": files}), 200
+        # 返回标准的 JSON 格式，状态码 200，明确指定 Content-Type
+        response = jsonify({"files": files})
+        response.headers['Content-Type'] = 'application/json; charset=utf-8'
+        print(f"返回文件列表: {files}")  # 调试信息
+        return response, 200
     except Exception as e:
         # 如果文件系统错误，返回 500
         print(f"Error listing files: {e}")
-        return jsonify({"error": f"Failed to list files: {str(e)}"}), 500
+        response = jsonify({"error": f"Failed to list files: {str(e)}"})
+        response.headers['Content-Type'] = 'application/json; charset=utf-8'
+        return response, 500
 
 
 @app.route('/file/<filename>', methods=['GET'])
@@ -124,11 +136,67 @@ def view_file(filename):
             'Content-Type': 'text/plain; charset=utf-8'}
 
 
+@app.route('/file/<filename>', methods=['DELETE'])
+def delete_file(filename):
+    """删除指定的文件"""
+    # 安全检查：防止路径遍历攻击
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if not os.path.abspath(filepath).startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
+        return jsonify({"error": "Access denied"}), 403
+
+    if not os.path.exists(filepath):
+        return jsonify({"error": "File not found"}), 404
+
+    try:
+        os.remove(filepath)
+        return jsonify({"message": f"File {filename} deleted successfully"}), 200
+    except Exception as e:
+        print(f"Error deleting file {filename}: {e}")
+        return jsonify({"error": f"Failed to delete file: {str(e)}"}), 500
+
+
+@app.route('/parse-file', methods=['POST'])
+def parse_file_endpoint():
+    """解析文件内容"""
+    try:
+        data = request.get_json()
+        filename = data.get('filename')
+        
+        if not filename:
+            return jsonify({"error": "文件名不能为空"}), 400
+        
+        # 安全检查：防止路径遍历攻击
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        if not os.path.abspath(filepath).startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
+            return jsonify({"error": "Access denied"}), 403
+        
+        # 调用解析函数
+        result = parse_file(filepath)
+        
+        if result['success']:
+            return jsonify({
+                "success": True,
+                "content": result['content'],
+                "message": result['message'],
+                "filename": result.get('filename'),
+                "file_size": result.get('file_size')
+            }), 200
+        else:
+            return jsonify({
+                "success": False,
+                "error": result['message']
+            }), 500
+            
+    except Exception as e:
+        print(f"Error parsing file: {e}")
+        return jsonify({"error": f"解析文件时发生错误: {str(e)}"}), 500
+
+
 if __name__ == '__main__':
     print("----------------------------------------------------------")
     print("🚀 Sandbox OS Pro 后端服务已启动，请勿关闭此窗口！")
     print(f"📁 文件将存储在: {os.path.abspath(UPLOAD_FOLDER)}")
-    print("🔗 API 正在监听: http://120.0.0.1:5000") # Flask 默认监听 127.0.0.1
+    print("🔗 API 正在监听: http://127.0.0.1:5000")
     print("----------------------------------------------------------")
     # 生产环境中应禁用 debug=True
     app.run(host='127.0.0.1', port=5000, debug=True)
