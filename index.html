@@ -1028,11 +1028,13 @@
 
         // ========== ASR 实时语音识别功能 ==========
         
-        // 计算 ASR WebSocket 地址
+        // 计算 ASR WebSocket 地址（与 temp 工程保持一致，便于线上通过反向代理暴露 /asr/ws）
         function getAsrWsUrl() {
             if (window.ASR_WS_URL) return window.ASR_WS_URL;
             const isHttps = location.protocol === 'https:';
-            if (isHttps) return `wss://${location.hostname}:5001/ws`;
+            // HTTPS 场景建议由网关将 /asr/ws 转发到 5001 端口
+            if (isHttps) return `wss://${location.host}/asr/ws`;
+            // 本地/HTTP 场景直接连 5001 端口
             return `ws://${location.hostname}:5001/ws`;
         }
 
@@ -1101,10 +1103,9 @@
                     return false;
                 }
                 
-                // 获取麦克风权限
+                // 获取麦克风权限（参数与 temp 工程保持一致）
                 mediaStream = await navigator.mediaDevices.getUserMedia({ 
                     audio: {
-                        sampleRate: 16000,
                         channelCount: 1,
                         echoCancellation: true,
                         noiseSuppression: true

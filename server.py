@@ -6,6 +6,7 @@ import json
 import sys
 from agent.file_parser import parse_file
 from agent.chat import get_chat_service
+from agent.intent_tools import smart_open_file_from_text
 
 # 初始化 Flask 应用
 app = Flask(__name__)
@@ -367,7 +368,7 @@ def chat_endpoint():
         
         # 获取对话服务
         chat_service = get_chat_service()
-        
+
         # 如果有附件，直接返回非流式响应
         if has_attachments:
             result = chat_service.chat(
@@ -387,6 +388,24 @@ def chat_endpoint():
                     "success": False,
                     "error": result.get('error', '对话失败')
                 }), 500
+
+        # 无附件时：先做一次智能意图识别与打开文件动作（如果需要）
+        smart_action_result = smart_open_file_from_text(message, UPLOAD_FOLDER)
+        smart_action_summary = None
+        if smart_action_result.get("intent") == "打开文件":
+            # 根据打开结果生成一条系统提示，作为额外上下文注入给 LLM
+            target_name = smart_action_result.get("target_name") or "目标文件"
+            if smart_action_result.get("opened"):
+                smart_action_summary = (
+                    f"系统提示：根据用户指令，已经在本机尝试打开名为「{target_name}」的沙盒文件。"
+                    "请用自然的口吻向用户确认你已经帮他打开了这个文件，并可继续回答其他问题。"
+                )
+            else:
+                error = smart_action_result.get("error") or "未知原因"
+                smart_action_summary = (
+                    f"系统提示：检测到用户意图是打开文件，但在沙盒中未能成功打开对应文件（原因：{error}）。"
+                    "请向用户说明当前无法自动打开文件，并给出可能的检查/解决建议。"
+                )
         
         # 流式输出
         def generate():
@@ -398,6 +417,10 @@ def chat_endpoint():
                 # 添加用户消息
                 from dashscope.api_entities.dashscope_response import Role
                 messages.append({'role': Role.USER, 'content': message})
+
+                # 如果有智能动作结果，作为额外 SYSTEM 信息注入
+                if smart_action_summary:
+                    messages.append({'role': Role.SYSTEM, 'content': smart_action_summary})
                 
                 # 限制历史对话轮数
                 from agent.chat import MAX_HISTORY_ROUNDS
