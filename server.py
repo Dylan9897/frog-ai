@@ -283,6 +283,29 @@ def chat_endpoint():
         return jsonify({"error": f"对话时发生错误: {str(e)}"}), 500
 
 
+@app.route('/chat/clear', methods=['POST'])
+def clear_chat_endpoint():
+    """清除对话记录"""
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id', 'default')
+        
+        # 获取对话服务
+        chat_service = get_chat_service()
+        
+        # 清除会话
+        chat_service.clear_session(session_id)
+        
+        return jsonify({
+            "success": True,
+            "message": "对话记录已清除"
+        }), 200
+            
+    except Exception as e:
+        print(f"Error clearing chat: {e}")
+        return jsonify({"error": f"清除对话记录时发生错误: {str(e)}"}), 500
+
+
 if __name__ == '__main__':
     print("----------------------------------------------------------")
     print("🚀 Sandbox OS Pro 后端服务已启动，请勿关闭此窗口！")

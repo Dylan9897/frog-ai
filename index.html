@@ -234,10 +234,10 @@
             <div class="relative bg-slate-800 rounded-2xl border border-slate-700 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition-all">
                 <textarea
                     id="chat-input"
-                    class="w-full bg-transparent text-slate-200 text-sm p-3 pr-12 h-12 max-h-32 focus:outline-none resize-none placeholder-slate-500"
-                    placeholder="问点什么..."
-                    onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }"
-                    oninput="this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 128) + 'px';"
+                    class="w-full bg-transparent text-slate-200 text-base p-3.5 pr-12 h-14 max-h-40 focus:outline-none resize-none placeholder-slate-500"
+                    placeholder="问点什么...（长按空格1秒开始语音输入）"
+                    onkeydown="handleKeyDown(event)"
+                    oninput="this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 160) + 'px';"
                 ></textarea>
                 <div class="flex justify-between items-center px-2 pb-2">
                     <div class="flex gap-1">
@@ -555,6 +555,23 @@
         // 聊天消息相关变量
         let chatAttachments = [];
         let isParsing = false; // 是否正在解析文件
+        
+        // ASR 相关变量
+        let asrWebSocket = null;
+        let audioContext = null;
+        let mediaStream = null;
+        let audioWorkletNode = null;
+        let isRecording = false;
+        let spaceKeyDownTime = null;
+        let spaceKeyHoldTimer = null;
+        let asrDraftElement = null;
+        let asrFinalText = '';
+        const SPACE_HOLD_THRESHOLD = 1000; // 长按1秒触发
+        
+        // TTS 相关变量
+        let isSpeaking = false;
+        let currentUtterances = [];
+        let lastSpokenOffset = 0; // 记录已播报文本的长度（字符位置）
 
         // 显示文件解析状态（固定在输入框上方）
         function showParsingStatus(filename, status) {
@@ -675,7 +692,7 @@
                                 </div>
                             </div>
                         `).join('') : ''}
-                        ${text ? `<div class="msg-bubble-user p-3 rounded-2xl rounded-tr-none text-sm shadow-md">
+                        ${text ? `<div class="msg-bubble-user p-3.5 rounded-2xl rounded-tr-none text-base shadow-md">
                             ${text}
                         </div>` : ''}
                     </div>
@@ -720,8 +737,20 @@
                 return;
             }
             
+            // 如果正在播报，停止播报
+            if (isSpeaking) {
+                stopAllSpeech();
+            }
+            
             const message = chatInput.value.trim();
             if (!message && chatAttachments.length === 0) return;
+
+            // 检查是否是清除命令
+            if (message === '/clear') {
+                clearChatHistory();
+                chatInput.value = '';
+                return;
+            }
 
             // 添加用户消息
             appendMessage(message || '（仅附件）', 'user', chatAttachments);
@@ -739,6 +768,9 @@
             
             // 调用后端 API 获取 AI 回复（流式输出）
             try {
+                // 重置播报状态，准备新的播报
+                lastSpokenOffset = 0;
+                
                 // 先创建一个空的 AI 消息框
                 const aiMessageId = `ai-message-${Date.now()}`;
                 appendMessage('', 'ai', [], aiMessageId);
@@ -763,6 +795,8 @@
                     
                     if (data.success) {
                         updateMessage(aiMessageId, data.reply);
+                        // 自动播报 AI 回复
+                        speakText(data.reply);
                     } else {
                         updateMessage(aiMessageId, `抱歉，发生了错误：${data.error || '未知错误'}`);
                     }
@@ -811,13 +845,23 @@
                                     if (data.chunk) {
                                         fullReply += data.chunk;
                                         updateMessage(aiMessageId, fullReply);
+                                        
+                                        // 边输出边播报（增量播报）
+                                        speakTextIncremental(fullReply);
                                     }
                                     
                                     if (data.done) {
                                         // 流式输出完成
                                         if (data.full_reply) {
                                             updateMessage(aiMessageId, data.full_reply);
+                                            // 确保最后的内容也被播报
+                                            speakTextIncremental(data.full_reply, true);
+                                        } else if (fullReply) {
+                                            // 如果没有 full_reply，使用累积的 fullReply
+                                            speakTextIncremental(fullReply, true);
                                         }
+                                        // 重置已播报位置，为下次播报做准备
+                                        lastSpokenOffset = 0;
                                         return;
                                     }
                                 } catch (e) {
@@ -947,6 +991,517 @@
                 }
             });
         }
+
+        // ========== ASR 实时语音识别功能 ==========
+        
+        // 计算 ASR WebSocket 地址
+        function getAsrWsUrl() {
+            if (window.ASR_WS_URL) return window.ASR_WS_URL;
+            const isHttps = location.protocol === 'https:';
+            if (isHttps) return `wss://${location.hostname}:5001/ws`;
+            return `ws://${location.hostname}:5001/ws`;
+        }
+
+        // 初始化 ASR WebSocket 连接
+        async function initASRWebSocket() {
+            if (asrWebSocket && asrWebSocket.readyState === WebSocket.OPEN) {
+                return true;
+            }
+            
+            return new Promise((resolve, reject) => {
+                try {
+                    const url = getAsrWsUrl();
+                    asrWebSocket = new WebSocket(url);
+                    
+                    asrWebSocket.onopen = () => {
+                        console.log('[ASR] WebSocket 已连接');
+                        resolve(true);
+                    };
+                    
+                    asrWebSocket.onmessage = async (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            if (data.type === 'partial') {
+                                updateASRDraft(data.text, false);
+                            } else if (data.type === 'final') {
+                                updateASRDraft(data.text, true);
+                                asrFinalText = data.text;
+                            } else if (data.type === 'error') {
+                                console.error('[ASR] 错误:', data.message);
+                                showParsingStatus('', 'clear');
+                            }
+                        } catch (e) {
+                            console.error('[ASR] 处理消息异常:', e);
+                        }
+                    };
+                    
+                    asrWebSocket.onerror = (error) => {
+                        console.error('[ASR] WebSocket 错误:', error);
+                        reject(error);
+                    };
+                    
+                    asrWebSocket.onclose = () => {
+                        console.log('[ASR] WebSocket 已关闭');
+                        asrWebSocket = null;
+                    };
+                    
+                    setTimeout(() => {
+                        if (!asrWebSocket || asrWebSocket.readyState !== WebSocket.OPEN) {
+                            reject(new Error('WebSocket 连接超时'));
+                        }
+                    }, 5000);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+
+        // 启动 ASR 录音
+        async function startASR() {
+            if (isRecording) return false;
+            
+            try {
+                const wsReady = await initASRWebSocket();
+                if (!wsReady) {
+                    console.error('[ASR] WebSocket 连接失败');
+                    return false;
+                }
+                
+                // 获取麦克风权限
+                mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        sampleRate: 16000,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    } 
+                });
+                
+                // 创建 AudioContext
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 16000
+                });
+                
+                // 创建 MediaStreamAudioSourceNode
+                const source = audioContext.createMediaStreamSource(mediaStream);
+                
+                // 创建 ScriptProcessorNode 处理音频
+                const processor = audioContext.createScriptProcessor(4096, 1, 1);
+                
+                processor.onaudioprocess = (e) => {
+                    if (!isRecording || !asrWebSocket || asrWebSocket.readyState !== WebSocket.OPEN) {
+                        return;
+                    }
+                    
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    const pcmData = new Int16Array(inputData.length);
+                    
+                    for (let i = 0; i < inputData.length; i++) {
+                        const s = Math.max(-1, Math.min(1, inputData[i]));
+                        pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    }
+                    
+                    const base64Audio = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
+                    asrWebSocket.send(JSON.stringify({
+                        type: 'audio',
+                        data: base64Audio
+                    }));
+                };
+                
+                source.connect(processor);
+                processor.connect(audioContext.destination);
+                
+                isRecording = true;
+                // 草稿气泡已经在 startASR 调用前创建
+                console.log('[ASR] ✅ 开始录音');
+                return true;
+            } catch (error) {
+                console.error('[ASR] 启动失败:', error);
+                return false;
+            }
+        }
+
+        // 停止 ASR 录音
+        async function stopASR() {
+            if (!isRecording) return;
+            
+            isRecording = false;
+            
+            // 停止音频流
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            
+            if (audioContext) {
+                await audioContext.close();
+                audioContext = null;
+            }
+            
+            // 发送停止信号
+            if (asrWebSocket && asrWebSocket.readyState === WebSocket.OPEN) {
+                try {
+                    asrWebSocket.send(JSON.stringify({ type: 'stop' }));
+                } catch (e) {
+                    console.error('[ASR] 发送 stop 失败:', e);
+                }
+            }
+            
+            // 等待最终结果
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // 如果有最终文本，自动发送
+            if (asrFinalText && asrFinalText.trim()) {
+                const draftBubble = document.getElementById('asr-draft-bubble');
+                if (draftBubble) draftBubble.remove();
+                asrDraftElement = null;
+                
+                chatInput.value = asrFinalText.trim();
+                sendMessage();
+                asrFinalText = '';
+            } else if (asrDraftElement) {
+                // 如果没有最终文本，移除草稿
+                const draftBubble = document.getElementById('asr-draft-bubble');
+                if (draftBubble) draftBubble.remove();
+                asrDraftElement = null;
+            }
+            
+            console.log('[ASR] 🛑 停止录音');
+        }
+
+        // 创建 ASR 草稿气泡
+        function createASRDraft() {
+            // 如果已存在，先移除
+            const existingBubble = document.getElementById('asr-draft-bubble');
+            if (existingBubble) {
+                existingBubble.remove();
+            }
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.id = 'asr-draft-bubble';
+            messageDiv.className = 'flex gap-3 flex-row-reverse';
+            
+            messageDiv.innerHTML = `
+                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" class="w-8 h-8 rounded-full bg-slate-700 flex-shrink-0 mt-1">
+                <div class="flex flex-col items-end gap-2 max-w-[85%]">
+                    <div class="msg-bubble-user p-3.5 rounded-2xl rounded-tr-none text-base shadow-md opacity-80 border-2 border-indigo-400/50">
+                        <span class="text-slate-200 flex items-center gap-2">
+                            <i class="fa-solid fa-microphone text-indigo-400 animate-pulse"></i>
+                            <span>正在识别语音...</span>
+                        </span>
+                    </div>
+                </div>
+            `;
+            
+            chatMessages.appendChild(messageDiv);
+            scrollToChatBottom();
+            
+            // 保存整个消息气泡元素，方便后续更新
+            asrDraftElement = messageDiv.querySelector('.msg-bubble-user');
+            asrFinalText = '';
+            console.log('[ASR] ✅ 草稿气泡已创建');
+        }
+
+        // 更新 ASR 草稿内容
+        function updateASRDraft(text, isFinal = false) {
+            // 通过 ID 查找气泡，确保总是能找到
+            const bubble = document.getElementById('asr-draft-bubble');
+            if (!bubble) {
+                console.warn('[ASR] 草稿气泡不存在，无法更新');
+                return;
+            }
+            
+            const contentDiv = bubble.querySelector('.msg-bubble-user');
+            if (!contentDiv) {
+                console.warn('[ASR] 内容元素不存在，无法更新');
+                return;
+            }
+            
+            // 更新文本内容
+            if (text && text.trim()) {
+                contentDiv.innerHTML = `<span class="text-slate-200">${text}</span>`;
+            } else {
+                contentDiv.innerHTML = '<span class="text-slate-300 flex items-center gap-2"><i class="fa-solid fa-microphone text-indigo-400 animate-pulse"></i><span>正在识别...</span></span>';
+            }
+            
+            // 更新 asrDraftElement 引用
+            asrDraftElement = contentDiv;
+            
+            if (isFinal) {
+                asrFinalText = text;
+                bubble.style.opacity = '1';
+                contentDiv.classList.remove('border-2', 'border-indigo-400/50');
+                console.log('[ASR] ✅ 最终结果已更新:', text);
+            }
+        }
+
+        // 键盘事件处理（长按空格触发ASR）
+        function handleKeyDown(event) {
+            // Enter 键发送消息（仅在输入框内）
+            if (event.key === 'Enter' && !event.shiftKey && document.activeElement === chatInput) {
+                event.preventDefault();
+                sendMessage();
+                return;
+            }
+        }
+
+        // 全局键盘事件监听（用于长按空格触发ASR）
+        document.addEventListener('keydown', (event) => {
+            // 如果正在输入框内打字，不触发 ASR
+            if (document.activeElement === chatInput) {
+                return;
+            }
+            
+            // 长按空格1秒触发 ASR
+            if (event.code === 'Space' && !event.repeat) {
+                event.preventDefault();
+                spaceKeyDownTime = Date.now();
+                
+                console.log('[ASR] 空格键按下，开始计时...');
+                
+                spaceKeyHoldTimer = setTimeout(async () => {
+                    console.log('[ASR] ✅ 长按空格1秒，触发ASR');
+                    
+                    // 如果正在播放 TTS，先停止
+                    if (isSpeaking) {
+                        stopAllSpeech();
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                    
+                    // 先创建草稿气泡，显示"正在识别..."
+                    createASRDraft();
+                    
+                    const success = await startASR();
+                    if (!success) {
+                        // 如果启动失败，更新草稿气泡显示错误
+                        const draftBubble = document.getElementById('asr-draft-bubble');
+                        if (draftBubble) {
+                            const contentDiv = draftBubble.querySelector('.msg-bubble-user');
+                            if (contentDiv) {
+                                contentDiv.innerHTML = '<span class="text-red-400 flex items-center gap-2"><i class="fa-solid fa-exclamation-circle"></i><span>ASR 启动失败，请检查服务是否运行（端口 5001）</span></span>';
+                            }
+                            setTimeout(() => {
+                                draftBubble.remove();
+                                asrDraftElement = null;
+                            }, 3000);
+                        } else {
+                            asrDraftElement = null;
+                        }
+                    }
+                }, SPACE_HOLD_THRESHOLD);
+            }
+        });
+
+        // 键盘释放事件
+        document.addEventListener('keyup', (event) => {
+            if (event.code === 'Space') {
+                event.preventDefault();
+                
+                if (spaceKeyHoldTimer) {
+                    clearTimeout(spaceKeyHoldTimer);
+                    spaceKeyHoldTimer = null;
+                }
+                
+                if (isRecording) {
+                    stopASR();
+                }
+            }
+        });
+
+        // ========== TTS 语音播报功能 ==========
+        
+        // 停止所有 TTS 播报
+        function stopAllSpeech() {
+            if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+            }
+            isSpeaking = false;
+            currentUtterances = [];
+            lastSpokenOffset = 0; // 重置已播报位置
+        }
+
+        // 清除对话记录
+        async function clearChatHistory() {
+            try {
+                // 停止所有播报
+                stopAllSpeech();
+                
+                // 清除前端聊天消息（保留欢迎消息）
+                const welcomeMessage = chatMessages.querySelector('.flex.gap-3:first-child');
+                chatMessages.innerHTML = '';
+                if (welcomeMessage) {
+                    chatMessages.appendChild(welcomeMessage);
+                }
+                
+                // 调用后端清除会话
+                const response = await fetch(`${API_BASE}/chat/clear`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        session_id: 'default'
+                    })
+                });
+                
+                if (response.ok) {
+                    console.log('[Chat] 对话记录已清除');
+                }
+            } catch (error) {
+                console.error('清除对话记录失败:', error);
+            }
+        }
+
+        // TTS 增量播报（边输出边播报，只在"完整句子"时触发）
+        function speakTextIncremental(text, isFinal = false) {
+            if (!text || !window.speechSynthesis) {
+                console.log('[TTS] 跳过播报：无文本或浏览器不支持');
+                return;
+            }
+            
+            // 提取纯文本（去除Markdown等格式）
+            const cleanText = text.replace(/[#*_`\[\]()]/g, '').trim();
+            if (!cleanText) {
+                console.log('[TTS] 跳过播报：清理后文本为空');
+                return;
+            }
+            
+            // 取出本次尚未播报的新增部分
+            if (lastSpokenOffset >= cleanText.length) {
+                console.log('[TTS] 跳过播报：已播报完所有内容');
+                return;
+            }
+            const pendingText = cleanText.slice(lastSpokenOffset);
+            if (!pendingText.trim()) {
+                console.log('[TTS] 跳过播报：待播报文本为空');
+                return;
+            }
+            
+            console.log('[TTS] 准备播报，已播报位置:', lastSpokenOffset, '待播报文本长度:', pendingText.length);
+            
+            // 只对"以句号/感叹号/问号结尾的完整句子"做增量播报
+            const sentenceRegex = /[^。！？.!?]+[。！？.!?]/g;
+            let match;
+            let consumedLength = 0;
+            const sentencesToSpeak = [];
+            
+            // 重置正则表达式的 lastIndex，确保从头开始匹配
+            sentenceRegex.lastIndex = 0;
+            while ((match = sentenceRegex.exec(pendingText)) !== null) {
+                const sentence = match[0].trim();
+                if (sentence) {
+                    sentencesToSpeak.push(sentence);
+                    // 计算已匹配文本的实际长度（包括匹配到的完整句子）
+                    consumedLength = match.index + match[0].length;
+                }
+            }
+            
+            // 如果不是最终结果，且没有完整句子，就先不播报，等下一个 chunk
+            if (!isFinal && sentencesToSpeak.length === 0) {
+                console.log('[TTS] 等待完整句子，暂不播报');
+                return;
+            }
+            
+            // 非最终结果：只播报完整句子部分，留下尾巴（未成句部分）到下次再播
+            // 最终结果：尾巴（如果有）也一起播报
+            if (isFinal) {
+                const tailText = pendingText.slice(consumedLength).trim();
+                if (tailText) {
+                    sentencesToSpeak.push(tailText);
+                    consumedLength = pendingText.length;
+                }
+            }
+            
+            if (sentencesToSpeak.length === 0) {
+                console.log('[TTS] 没有可播报的句子');
+                return;
+            }
+            
+            console.log('[TTS] 开始播报', sentencesToSpeak.length, '个句子:', sentencesToSpeak);
+            
+            // 播报所有待播句子
+            sentencesToSpeak.forEach((sentence) => {
+                if (!sentence) return;
+                
+                if (!isSpeaking) {
+                    isSpeaking = true;
+                }
+                
+                const utterance = new SpeechSynthesisUtterance(sentence);
+                utterance.lang = 'zh-CN';
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+                
+                utterance.onend = () => {
+                    // 检查是否所有播报都完成了
+                    if (window.speechSynthesis.speaking === false) {
+                        isSpeaking = false;
+                    }
+                };
+                
+                utterance.onerror = () => {
+                    if (window.speechSynthesis.speaking === false) {
+                        isSpeaking = false;
+                    }
+                };
+                
+                currentUtterances.push(utterance);
+                window.speechSynthesis.speak(utterance);
+            });
+            
+            // 更新"已播报到哪里了"的位置
+            lastSpokenOffset = lastSpokenOffset + consumedLength;
+            if (isFinal) {
+                lastSpokenOffset = cleanText.length;
+            }
+        }
+
+        // TTS 朗读文本（完整文本，一次性播报）
+        function speakText(text) {
+            if (!text || !window.speechSynthesis) return;
+            
+            // 停止之前的播报
+            stopAllSpeech();
+            
+            isSpeaking = true;
+            
+            // 提取纯文本（去除Markdown等格式）
+            const cleanText = text.replace(/[#*_`\[\]()]/g, '').trim();
+            if (!cleanText) return;
+            
+            // 分句朗读
+            const sentences = cleanText.match(/[^。！？.!?]+[。！？.!?]*/g) || [cleanText];
+            
+            sentences.forEach((sentence, index) => {
+                const trimmed = sentence.trim();
+                if (!trimmed) return;
+                
+                const utterance = new SpeechSynthesisUtterance(trimmed);
+                utterance.lang = 'zh-CN';
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+                
+                if (index === sentences.length - 1) {
+                    utterance.onend = () => {
+                        isSpeaking = false;
+                        lastSpokenOffset = cleanText.length;
+                    };
+                }
+                
+                utterance.onerror = () => {
+                    isSpeaking = false;
+                };
+                
+                currentUtterances.push(utterance);
+                window.speechSynthesis.speak(utterance);
+            });
+        }
+
+        // 修改 sendMessage 函数，在流式输出完成后自动播报
+        // 在流式输出完成的地方添加 TTS 播报
+        // 找到 updateMessage 调用完成的地方，添加 speakText
 
         // 页面加载时获取文件列表
         loadFiles();
