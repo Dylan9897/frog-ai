@@ -33,34 +33,83 @@ if not os.path.exists(SHORTCUT_DIR):
 SHORTCUT_CONFIG_PATH = os.path.join(SHORTCUT_DIR, 'shortcuts.json')
 
 
+def _load_shortcuts() -> dict:
+    """读取快捷方式配置 JSON，失败时返回空字典。"""
+    if not os.path.exists(SHORTCUT_CONFIG_PATH):
+        return {}
+    try:
+        with open(SHORTCUT_CONFIG_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data or {}
+    except Exception as e:
+        print(f"读取快捷方式配置失败: {e}")
+        return {}
+
+
+def _save_shortcuts(shortcuts: dict) -> None:
+    """保存快捷方式配置 JSON。"""
+    try:
+        with open(SHORTCUT_CONFIG_PATH, 'w', encoding='utf-8') as f:
+            json.dump(shortcuts, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"写入快捷方式配置失败: {e}")
+
+
 def register_shortcut(filename: str, filepath: str):
     """
     记录一个“快捷方式”信息到 JSON 文件中，方便后续扩展/集成。
     实际打开文件时仍然直接使用真实路径（os.startfile）。
     """
     try:
-        shortcuts = {}
-        if os.path.exists(SHORTCUT_CONFIG_PATH):
-            with open(SHORTCUT_CONFIG_PATH, 'r', encoding='utf-8') as f:
-                try:
-                    shortcuts = json.load(f) or {}
-                except Exception:
-                    shortcuts = {}
-
+        shortcuts = _load_shortcuts()
         shortcuts[filename] = os.path.abspath(filepath)
-
-        with open(SHORTCUT_CONFIG_PATH, 'w', encoding='utf-8') as f:
-            json.dump(shortcuts, f, ensure_ascii=False, indent=2)
+        _save_shortcuts(shortcuts)
     except Exception as e:
         print(f"注册快捷方式失败: {e}")
 
 
+def remove_shortcut(filename: str):
+    """从快捷方式配置 JSON 中移除某个文件的映射。"""
+    try:
+        shortcuts = _load_shortcuts()
+        if filename in shortcuts:
+            shortcuts.pop(filename, None)
+            _save_shortcuts(shortcuts)
+    except Exception as e:
+        print(f"移除快捷方式失败: {e}")
+
+
 # --- 实用函数 ---
-def allowed_file(filename):
+# 允许上传的常见文件扩展名（白名单策略，可按需扩展）
+ALLOWED_EXTENSIONS = {
+    # 文本 / 配置类
+    'txt', 'log', 'md', 'markdown', 'rst',
+    'json', 'yaml', 'yml', 'ini', 'cfg',
+    'csv', 'tsv', 'xml',
+    # 代码 / 脚本类
+    'py', 'js', 'jsx', 'ts', 'tsx',
+    'html', 'htm', 'css',
+    # 文档 / 表格 / 演示
+    'pdf',
+    'doc', 'docx',
+    'xls', 'xlsx',
+    'ppt', 'pptx',
+    # 图片
+    'png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'ico',
+    # 压缩包
+    'zip', 'rar', '7z', 'tar', 'gz',
+    # 音频 / 视频（仅作为附件管理，不做文本预览）
+    'mp3', 'wav', 'ogg', 'flac',
+    'mp4', 'mov', 'avi', 'mkv', 'webm',
+}
+
+
+def allowed_file(filename: str) -> bool:
     """只允许特定的文件扩展名，防止恶意上传"""
-    return '.' in filename and \
-        filename.rsplit('.', 1)[1].lower() in {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'py', 'js', 'html', 'css',
-                                               'md', 'json', 'csv', 'xml', 'doc', 'docx', 'pptx'}
+    if '.' not in filename:
+        return False
+    ext = filename.rsplit('.', 1)[1].lower()
+    return ext in ALLOWED_EXTENSIONS
 
 
 # --- 静态文件和根路由 ---
@@ -145,13 +194,25 @@ def view_file(filename):
     # 识别可作为文本预览的类型
     text_mimetypes = ['text/', 'json', 'xml', 'csv', 'javascript', 'python']
 
+    # 额外按扩展名强制当作文本预览的类型
+    text_like_exts = {
+        'txt', 'log',
+        'md', 'markdown',
+        'json', 'yaml', 'yml', 'ini', 'cfg',
+        'csv', 'tsv', 'xml',
+        'py', 'js', 'jsx', 'ts', 'tsx',
+        'html', 'htm', 'css',
+    }
+
     is_text_file = False
+    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+
     if mimetype:
         if any(mimetype.startswith(t) for t in text_mimetypes):
             is_text_file = True
         elif 'code' in mimetype or 'script' in mimetype:
             is_text_file = True
-    elif '.' in filename and filename.rsplit('.', 1)[1].lower() in ['py', 'js', 'html', 'css', 'md']:
+    if not is_text_file and ext in text_like_exts:
         is_text_file = True
 
     if is_text_file:
@@ -189,6 +250,14 @@ def delete_file(filename):
 
     try:
         os.remove(filepath)
+
+        # 同步删除对应的快捷方式配置
+        try:
+            remove_shortcut(filename)
+        except Exception as e:
+            # 不影响主流程，只记录日志
+            print(f"Warning: remove_shortcut failed for {filename}: {e}")
+
         return jsonify({"message": f"File {filename} deleted successfully"}), 200
     except Exception as e:
         print(f"Error deleting file {filename}: {e}")
