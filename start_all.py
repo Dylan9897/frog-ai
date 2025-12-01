@@ -31,12 +31,25 @@ def start_services():
         )
         processes.append(("ASR", asr_process))
         print(f"[启动] ASR 服务已启动 (PID: {asr_process.pid})")
+
+        # 启动桌面悬浮 Frog 助手（可选，不影响主服务）
+        try:
+            print("[启动] 桌面 Frog 助手...")
+            frog_process = subprocess.Popen(
+                [sys.executable, "desktop_frog.py"],
+                cwd=os.path.dirname(os.path.abspath(__file__))
+            )
+            processes.append(("FrogDesktop", frog_process))
+            print(f"[启动] 桌面助手已启动 (PID: {frog_process.pid})")
+        except Exception as e:
+            print(f"[警告] 无法启动桌面 Frog 助手: {e}")
         
         print("\n" + "=" * 60)
         print("✅ 所有服务已启动")
         print("=" * 60)
         print("📡 Flask 主服务: http://127.0.0.1:5000")
         print("🎤 ASR WebSocket: ws://127.0.0.1:5001/ws")
+        print("🐸 桌面助手: 已尝试启动（支持拖动，点击打开浏览器）")
         print("=" * 60)
         print("\n按 Ctrl+C 停止所有服务\n")
         
