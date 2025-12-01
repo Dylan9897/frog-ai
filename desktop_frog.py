@@ -40,7 +40,7 @@ class FloatingFrog(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground, True)
 
         # 加载图标
-        icon_path = os.path.join(PROJECT_ROOT, "frog.png")
+        icon_path = os.path.join(PROJECT_ROOT, "templates/frog.png")
         fallback_path = os.path.join(PROJECT_ROOT, "big_eye_robot.png")
         if not os.path.exists(icon_path):
             icon_path = fallback_path

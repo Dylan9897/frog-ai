@@ -5,7 +5,7 @@
 
 # DashScope API Key
 # 获取方式：https://dashscope.console.aliyun.com/
-DASHSCOPE_API_KEY = "sk-ec5eee92b8334405a5a3442a3a510221"
+DASHSCOPE_API_KEY = ""
 # 模型配置
 LLM_MODEL = "qwen-max"  # 可选: qwen-max, qwen-plus, qwen-turbo
 

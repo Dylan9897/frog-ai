@@ -1,0 +1,67 @@
+Frog AI / Sandbox OS Pro 非商业使用许可协议
+Non‑Commercial Use License
+
+Copyright (c) 2025 Frog AI. All rights reserved.
+
+------------------------------------------------------------------------------
+一、许可范围（中文）
+------------------------------------------------------------------------------
+
+在满足本协议条款的前提下，版权所有者授予您以下非排他性的、不可转让的权限：
+
+1. 您可以在个人、教学或科研等 **非商业目的** 下：
+   - 获取、使用本软件及其源代码；
+   - 修改本软件的源代码；
+   - 在非商业场景中再分发本软件或其修改版。
+
+2. 在任何再分发（包含源代码或二进制形式）中，您必须：
+   - 保留本版权声明和本许可协议的完整内容；
+   - 明确标注对原始项目的来源引用。
+
+3. **禁止的行为（无论直接或间接）：**
+   - 将本软件或其衍生作品用于任何形式的商业用途；
+   - 将本软件作为收费产品或服务的一部分进行销售、出租、租赁或提供有偿使用；
+   - 在闭源的商业产品中整合本软件的全部或重要部分；
+   - 以其他方式将本软件用于营利性目的（包括但不限于广告变现、SaaS 付费服务等）。
+
+4. 如您希望将本软件用于商业目的，必须事先获得版权所有者的 **书面授权**。
+
+5. 本软件按「现状」提供，不附带任何形式的明示或暗示担保，包括但不限于：
+   - 对适销性、特定用途适用性或不侵权的保证。
+   在任何情况下，版权所有者或贡献者均不对因使用本软件而导致的任何索赔、损害或其他责任负责。
+
+------------------------------------------------------------------------------
+II. License Scope (English Summary)
+------------------------------------------------------------------------------
+
+Subject to the terms of this License, the Copyright Holder grants you a
+non‑exclusive, non‑transferable license to:
+
+1. Use, copy and modify this software and its source code **for strictly
+   non‑commercial purposes only**, including personal use, education and
+   academic research.
+
+2. Redistribute the software or derivative works in non‑commercial contexts,
+   provided that:
+   - The above copyright notice and this License are included in all copies;
+   - Proper attribution to the original project is clearly given.
+
+3. **Commercial use is strictly prohibited**, including but not limited to:
+   - Selling, licensing, renting or leasing this software or derivative works;
+   - Using this software as part of any paid product or service;
+   - Integrating substantial portions of this software into closed‑source
+     commercial products;
+   - Any other use of this software with the primary intent of financial gain.
+
+4. For any intended **commercial use**, you must obtain **prior written
+   permission** from the Copyright Holder.
+
+5. THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+

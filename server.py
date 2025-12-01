@@ -119,7 +119,7 @@ def allowed_file(filename: str) -> bool:
 def index():
     """根路由：返回 index_v3.html 文件。"""
     # 确保 index_v3.html 能够被正确找到并发送
-    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), 'index.html')
+    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), 'templates/index.html')
 
 
 # --- API 路由 ---
