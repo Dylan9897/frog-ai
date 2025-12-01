@@ -800,7 +800,7 @@
                 showParsingStatus('', 'clear');
             }, 2000);
             
-            // 调用后端 API 获取 AI 回复（流式输出）
+            // 调用后端 API 获取 AI 回复（统一优先走流式，如果后端返回普通 JSON 则一次性展示）
             try {
                 // 重置播报状态，准备新的播报
                 lastSpokenOffset = 0;
@@ -810,99 +810,81 @@
                 appendMessage('', 'ai', [], aiMessageId);
                 
                 let fullReply = '';
-                
-                // 如果有附件，使用普通请求
+
+                const payload = {
+                    session_id: 'default',
+                    message: message || '（仅附件）',
+                    has_attachments: attachmentsToSend.length > 0,
+                };
                 if (attachmentsToSend.length > 0) {
-                    const response = await fetch(`${API_BASE}/chat`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            session_id: 'default',
-                            message: message || '（仅附件）',
-                            has_attachments: true
-                        })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        updateMessage(aiMessageId, data.reply);
-                        // 自动播报 AI 回复
-                        speakText(data.reply);
-                    } else {
-                        updateMessage(aiMessageId, `抱歉，发生了错误：${data.error || '未知错误'}`);
-                    }
-                } else {
-                    // 流式输出
-                    const response = await fetch(`${API_BASE}/chat`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            session_id: 'default',
-                            message: message || '（仅附件）',
-                            has_attachments: false
-                        })
-                    });
-                    
-                    if (!response.ok) {
+                    payload.attachment_filenames = attachmentsToSend.map(f => f.name);
+                }
+
+                const response = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                // 判断是否为流式 SSE
+                const contentType = response.headers.get('content-type') || '';
+                if (contentType.includes('text/event-stream')) {
+                    if (!response.ok || !response.body) {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
-                    
+
                     const reader = response.body.getReader();
                     const decoder = new TextDecoder();
-                    
+
                     while (true) {
                         const { done, value } = await reader.read();
-                        
-                        if (done) {
-                            break;
-                        }
-                        
-                        // 解码数据
+                        if (done) break;
+
                         const chunk = decoder.decode(value, { stream: true });
                         const lines = chunk.split('\n');
-                        
+
                         for (const line of lines) {
-                            if (line.startsWith('data: ')) {
-                                try {
-                                    const data = JSON.parse(line.slice(6));
-                                    
-                                    if (data.error) {
-                                        updateMessage(aiMessageId, `抱歉，发生了错误：${data.error}`);
-                                        return;
-                                    }
-                                    
-                                    if (data.chunk) {
-                                        fullReply += data.chunk;
-                                        updateMessage(aiMessageId, fullReply);
-                                        
-                                        // 边输出边播报（增量播报）
-                                        speakTextIncremental(fullReply);
-                                    }
-                                    
-                                    if (data.done) {
-                                        // 流式输出完成
-                                        if (data.full_reply) {
-                                            updateMessage(aiMessageId, data.full_reply);
-                                            // 确保最后的内容也被播报
-                                            speakTextIncremental(data.full_reply, true);
-                                        } else if (fullReply) {
-                                            // 如果没有 full_reply，使用累积的 fullReply
-                                            speakTextIncremental(fullReply, true);
-                                        }
-                                        // 重置已播报位置，为下次播报做准备
-                                        lastSpokenOffset = 0;
-                                        return;
-                                    }
-                                } catch (e) {
-                                    console.error('解析流式数据失败:', e);
+                            if (!line.startsWith('data: ')) continue;
+                            try {
+                                const data = JSON.parse(line.slice(6));
+
+                                if (data.error) {
+                                    updateMessage(aiMessageId, `抱歉，发生了错误：${data.error}`);
+                                    return;
                                 }
+
+                                if (data.chunk) {
+                                    fullReply += data.chunk;
+                                    updateMessage(aiMessageId, fullReply);
+                                    speakTextIncremental(fullReply);
+                                }
+
+                                if (data.done) {
+                                    const finalText = data.full_reply || fullReply;
+                                    if (finalText) {
+                                        updateMessage(aiMessageId, finalText);
+                                        speakTextIncremental(finalText, true);
+                                    }
+                                    lastSpokenOffset = 0;
+                                    return;
+                                }
+                            } catch (e) {
+                                console.error('解析流式数据失败:', e);
                             }
                         }
+                    }
+                } else {
+                    // 普通 JSON 响应（例如全部不支持的附件类型时的固定话术）
+                    const data = await response.json();
+                    if (data.success) {
+                        updateMessage(aiMessageId, data.reply || '');
+                        if (data.reply) {
+                            speakText(data.reply);
+                        }
+                    } else {
+                        updateMessage(aiMessageId, `抱歉，发生了错误：${data.error || '未知错误'}`);
                     }
                 }
             } catch (error) {
@@ -912,7 +894,7 @@
             }
         }
 
-        // 聊天上传处理（对话框文件独立，上传到服务器但不显示在沙盒）
+        // 聊天上传处理（对话框文件独立，上传到服务器的 cache 目录，不显示在沙盒）
         document.getElementById('chat-upload').addEventListener('change', async function() {
             if(this.files.length > 0) {
                 const files = Array.from(this.files);
@@ -923,7 +905,7 @@
                     formData.append('file', file);
                     
                     try {
-                        const response = await fetch(`${API_BASE}/upload`, {
+                        const response = await fetch(`${API_BASE}/chat-upload`, {
                             method: 'POST',
                             body: formData
                         });
@@ -992,7 +974,7 @@
                     // 解析文件（沙盒文件已经在服务器上）
                     await parseFile(sandboxFilename);
                 } else {
-                    // 从电脑拖拽的文件（对话框文件，上传到服务器但不显示在沙盒）
+                    // 从电脑拖拽的文件（对话框文件，上传到服务器 cache，但不显示在沙盒）
                     const files = Array.from(e.dataTransfer.files);
                     if (files.length > 0) {
                         // 上传文件到服务器（用于解析），但不显示在沙盒
@@ -1001,7 +983,7 @@
                             formData.append('file', file);
                             
                             try {
-                                const response = await fetch(`${API_BASE}/upload`, {
+                                const response = await fetch(`${API_BASE}/chat-upload`, {
                                     method: 'POST',
                                     body: formData
                                 });

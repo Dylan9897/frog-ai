@@ -4,7 +4,7 @@ import os
 import mimetypes
 import json
 import sys
-from agent.file_parser import parse_file
+from agent.file_parser import parse_file, SUPPORTED_EXTS
 from agent.chat import get_chat_service
 from agent.intent_tools import smart_open_file_from_text
 
@@ -19,12 +19,14 @@ CORS(app, resources={
     }
 })
 
-# 配置上传文件夹
+# 配置上传文件夹（沙盒文件）
 UPLOAD_FOLDER = 'uploads'
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
-
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# 配置问答缓存文件夹（仅用于对话附件，不在沙盒中展示）
+CACHE_FOLDER = 'cache'
+os.makedirs(CACHE_FOLDER, exist_ok=True)
 
 # 配置沙盒文件“快捷方式”目录和 JSON 配置
 SHORTCUT_DIR = 'sandbox_shortcuts'
@@ -113,6 +115,24 @@ def allowed_file(filename: str) -> bool:
     return ext in ALLOWED_EXTENSIONS
 
 
+def resolve_file_path(filename: str) -> str | None:
+    """
+    根据文件名在沙盒上传目录和问答缓存目录中查找真实路径。
+    优先使用沙盒目录（uploads），否则回退到 cache。
+    """
+    # 先查沙盒目录
+    upload_path = os.path.abspath(os.path.join(UPLOAD_FOLDER, filename))
+    if upload_path.startswith(os.path.abspath(UPLOAD_FOLDER)) and os.path.exists(upload_path):
+        return upload_path
+
+    # 再查缓存目录
+    cache_path = os.path.abspath(os.path.join(CACHE_FOLDER, filename))
+    if cache_path.startswith(os.path.abspath(CACHE_FOLDER)) and os.path.exists(cache_path):
+        return cache_path
+
+    return None
+
+
 # --- 静态文件和根路由 ---
 
 @app.route('/')
@@ -153,6 +173,31 @@ def upload_file():
             return jsonify({"message": f"File {filename} uploaded successfully", "path": filepath}), 200
         except Exception as e:
             print(f"Error saving file {filename}: {e}")
+            return jsonify({"error": f"Failed to save file: {str(e)}"}), 500
+
+    return jsonify({"error": "File type not allowed"}), 400
+
+
+@app.route('/chat-upload', methods=['POST'])
+def chat_upload_file():
+    """处理对话附件上传，文件仅存储在 cache 目录，不出现在沙盒文件墙中。"""
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    if file and allowed_file(file.filename):
+        filename = file.filename
+        filepath = os.path.join(CACHE_FOLDER, filename)
+
+        try:
+            file.save(filepath)
+            return jsonify({"message": f"File {filename} uploaded successfully", "path": filepath}), 200
+        except Exception as e:
+            print(f"Error saving chat file {filename}: {e}")
             return jsonify({"error": f"Failed to save file: {str(e)}"}), 500
 
     return jsonify({"error": "File type not allowed"}), 400
@@ -275,10 +320,10 @@ def parse_file_endpoint():
         if not filename:
             return jsonify({"error": "文件名不能为空"}), 400
         
-        # 安全检查：防止路径遍历攻击
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        if not os.path.abspath(filepath).startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
-            return jsonify({"error": "Access denied"}), 403
+        # 解析路径：优先在 uploads，其次在 cache
+        filepath = resolve_file_path(filename)
+        if not filepath:
+            return jsonify({"error": f"文件不存在: {filename}"}), 404
         
         # 调用解析函数
         result = parse_file(filepath)
@@ -369,27 +414,42 @@ def chat_endpoint():
         # 获取对话服务
         chat_service = get_chat_service()
 
-        # 如果有附件，直接返回非流式响应
+        # 预处理附件：仅支持特定文本/表格类型，并将解析后的内容作为上下文送入大模型
+        file_context = None
         if has_attachments:
-            result = chat_service.chat(
-                session_id=session_id,
-                user_message=message or '（仅附件）',
-                stream=False,
-                has_attachments=True
-            )
-            if result.get('success'):
-                return jsonify({
-                    "success": True,
-                    "reply": result.get('reply', ''),
-                    "session_id": result.get('session_id', session_id)
-                }), 200
-            else:
-                return jsonify({
-                    "success": False,
-                    "error": result.get('error', '对话失败')
-                }), 500
+            attachment_names = data.get('attachment_filenames') or []
 
-        # 无附件时：先做一次智能意图识别与打开文件动作（如果需要）
+            if attachment_names:
+                supported_contents = []
+
+                for name in attachment_names:
+                    _, ext = os.path.splitext(name)
+                    if ext.lower() not in SUPPORTED_EXTS:
+                        continue
+
+                    filepath = resolve_file_path(name)
+                    if not filepath:
+                        continue
+
+                    parse_result = parse_file(filepath)
+                    if parse_result.get('success'):
+                        supported_contents.append(parse_result.get('content', ''))
+
+                if supported_contents:
+                    # 将所有支持的文档内容拼接成一个上下文字符串
+                    file_context = "\n\n".join(supported_contents)
+                else:
+                    # 全部不支持或解析失败，统一返回默认话术（非流式即可）
+                    return jsonify({
+                        "success": True,
+                        "reply": (
+                            "当前仅支持基于以下几类文档进行问答：docx、xlsx/xls、md、txt、json。\n"
+                            "你上传的文件类型暂不在支持范围内，相关功能正在开发中。"
+                        ),
+                        "session_id": session_id
+                    }), 200
+
+        # 先做一次智能意图识别与打开文件动作（如果需要）
         smart_action_result = smart_open_file_from_text(message, UPLOAD_FOLDER)
         smart_action_summary = None
         if smart_action_result.get("intent") == "打开文件":
@@ -417,6 +477,15 @@ def chat_endpoint():
                 # 添加用户消息
                 from dashscope.api_entities.dashscope_response import Role
                 messages.append({'role': Role.USER, 'content': message})
+
+                # 如果有文档上下文，将其作为系统提示注入
+                if file_context:
+                    doc_system_prompt = (
+                        "下面是用户上传的文档内容摘要或正文片段，请在回答本轮问题时，"
+                        "优先依据这些文档内容进行推理和引用；当文档中没有相关信息时，再结合通用知识回答。\n\n"
+                        f"{file_context}"
+                    )
+                    messages.append({'role': Role.SYSTEM, 'content': doc_system_prompt})
 
                 # 如果有智能动作结果，作为额外 SYSTEM 信息注入
                 if smart_action_summary:

@@ -105,7 +105,7 @@ class ChatService:
         if session_id in self.sessions:
             del self.sessions[session_id]
     
-    def chat(self, session_id, user_message, stream=False, has_attachments=False):
+    def chat(self, session_id, user_message, stream=False, has_attachments=False, file_context: str | None = None):
         """
         对话接口
         :param session_id: 会话ID
@@ -125,17 +125,30 @@ class ChatService:
                 )
             }
 
-        # 如果有附件（文件），返回文件问答功能暂未上架的提示
-        if has_attachments:
+        # 如果有附件但没有可用的文件内容上下文，则统一认为功能尚未支持
+        if has_attachments and not file_context:
             return {
                 'success': True,
-                'reply': '抱歉，文件问答功能目前正在开发中，之后会上架，敬请期待！',
+                'reply': (
+                    '当前的文件问答功能仅支持以下几类文本/结构化文档：'
+                    'docx、xlsx/xls、md、txt、json。\n'
+                    '对于 PDF、图片等其他类型文件，相关能力正在开发中，请耐心等待。'
+                ),
                 'session_id': session_id
             }
         
         # 正常对话流程
         session = self.get_session(session_id)
         messages = session['messages']
+
+        # 如果有文件上下文，作为额外 SYSTEM 信息注入，提示模型优先依据文档回答
+        if file_context:
+            doc_system_prompt = (
+                "下面是用户上传的文档内容摘要或正文片段，请在回答本轮问题时，"
+                "优先依据这些文档内容进行推理和引用；当文档中没有相关信息时，再结合通用知识回答。\n\n"
+                f"{file_context}"
+            )
+            messages.append({'role': Role.SYSTEM, 'content': doc_system_prompt})
         
         # 添加用户消息
         messages.append({'role': Role.USER, 'content': user_message})
