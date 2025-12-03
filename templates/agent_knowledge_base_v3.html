@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge OS - Aurora V7.0</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- 1. 定义未来感配色与变量 --- */
+        :root {
+            /* 极光背景色系 */
+            --bg-deep: #050505;
+            --aurora-1: #4a00e0; /* 紫 */
+            --aurora-2: #8e2de2; /* 玫红 */
+            --aurora-3: #00f2ff; /* 赛博青 */
+
+            /* 玻璃态 */
+            --glass-surface: rgba(20, 20, 35, 0.4);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-highlight: rgba(255, 255, 255, 0.15);
+            --blur-strength: 20px;
+
+            /* 文本与高亮 */
+            --text-main: #ffffff;
+            --text-muted: #8b9bb4;
+            --accent-cyan: #00f2ff;
+            --accent-purple: #bc13fe;
+            --accent-success: #00ffa3;
+
+            /* 字体 */
+            --font-ui: 'Inter', sans-serif;
+            --font-code: 'JetBrains Mono', monospace;
+        }
+
+        /* --- 2. 沉浸式流体背景 --- */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: var(--font-ui);
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden;
+            /* 模拟深空极光背景 */
+            background-image:
+                radial-gradient(circle at 10% 20%, rgba(74, 0, 224, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(0, 242, 255, 0.1) 0%, transparent 40%),
+                radial-gradient(circle at 50% 50%, rgba(142, 45, 226, 0.05) 0%, transparent 60%);
+            background-attachment: fixed;
+        }
+
+        /* --- 3. 布局框架 --- */
+        .app-shell {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* 侧边栏 */
+        .sidebar {
+            width: 260px;
+            background: rgba(10, 10, 15, 0.6);
+            backdrop-filter: blur(var(--blur-strength));
+            border-right: 1px solid var(--glass-border);
+            padding: 24px 16px;
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+        }
+
+        .logo {
+            font-family: var(--font-code);
+            font-weight: 700;
+            font-size: 1.1rem;
+            letter-spacing: -0.5px;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .logo::before {
+            content: '';
+            width: 12px;
+            height: 12px;
+            background: var(--accent-cyan);
+            border-radius: 2px;
+            box-shadow: 0 0 10px var(--accent-cyan);
+        }
+
+        .upload-zone {
+            border: 1px dashed var(--glass-border);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-bottom: 25px;
+            transition: 0.3s;
+            background: rgba(255,255,255,0.02);
+            cursor: pointer;
+        }
+        .upload-zone:hover {
+            border-color: var(--accent-cyan);
+            color: var(--text-main);
+            background: rgba(0, 242, 255, 0.05);
+        }
+
+        .file-list-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            opacity: 0.7;
+        }
+
+        .file-item {
+            padding: 12px 14px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 2px solid transparent;
+        }
+        .file-item:hover { background: rgba(255,255,255,0.05); }
+        .file-item.active {
+            background: linear-gradient(90deg, rgba(0, 242, 255, 0.1), transparent);
+            border-left-color: var(--accent-cyan);
+        }
+        .file-name { font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 4px; }
+        .file-info { font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; }
+
+        /* 主工作区 */
+        .workspace {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* 顶部状态栏 */
+        .top-nav {
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--glass-border);
+            background: rgba(0,0,0,0.2);
+        }
+        .doc-header { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 12px; }
+        .status-pill {
+            font-size: 0.7rem;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: rgba(188, 19, 254, 0.15);
+            color: #d8b4fe;
+            border: 1px solid rgba(188, 19, 254, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* 分割线 (Resizer) - 激光样式 */
+        .resizer {
+            background: transparent;
+            z-index: 20;
+            transition: 0.3s;
+            position: relative;
+        }
+        .resizer-x { width: 6px; cursor: col-resize; border-left: 1px solid var(--glass-border); }
+        .resizer-y { height: 6px; cursor: row-resize; border-top: 1px solid var(--glass-border); }
+
+        .resizer:hover { border-color: var(--accent-cyan); box-shadow: 0 0 10px var(--accent-cyan); }
+
+        /* --- 核心区域：比对视图 --- */
+        .comparison-view {
+            height: 55%; /* 默认高度 */
+            display: flex;
+            padding: 0;
+            position: relative;
+        }
+
+        .panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(15, 15, 25, 0.3);
+            overflow: hidden;
+        }
+
+        /* 面板头部：含页码导航 */
+        .panel-toolbar {
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            border-bottom: 1px solid var(--glass-border);
+            background: rgba(255,255,255,0.02);
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+
+        /* 页码翻页器 */
+        .page-navigator {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(0,0,0,0.3);
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid var(--glass-border);
+        }
+        .page-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.9rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .page-btn:hover { color: var(--text-main); background: rgba(255,255,255,0.1); }
+        .current-page { color: var(--accent-cyan); font-family: var(--font-code); }
+
+        .panel-content {
+            padding: 24px;
+            overflow-y: auto;
+            flex: 1;
+            font-size: 0.95rem;
+            line-height: 1.7;
+            color: #d1d5db;
+        }
+
+        /* 解析文本样式 */
+        .parsed-text h3 { color: var(--text-main); font-weight: 600; margin-top: 0; }
+        .highlight-mark {
+            background: rgba(0, 242, 255, 0.15);
+            border-bottom: 1px solid var(--accent-cyan);
+            color: #fff;
+            padding: 0 2px;
+        }
+
+        /* --- 底部区域：知识切片 --- */
+        .knowledge-stream {
+            flex-grow: 1;
+            background: rgba(10, 10, 15, 0.5);
+            backdrop-filter: blur(10px);
+            padding: 0 24px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .stream-header {
+            padding: 16px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 5;
+        }
+        .stream-title { font-weight: 600; font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+
+        .chunk-container {
+            overflow-y: auto;
+            padding-bottom: 30px;
+        }
+
+        /* 知识卡片 - 艺术感核心 */
+        .chunk-card {
+            background: linear-gradient(145deg, rgba(30, 30, 45, 0.6), rgba(20, 20, 30, 0.4));
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 20px 24px 50px 24px; /* 底部留白给按钮 */
+            margin-bottom: 16px;
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .chunk-card:hover {
+            transform: scale(1.01) translateY(-2px);
+            border-color: rgba(0, 242, 255, 0.3);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+            background: linear-gradient(145deg, rgba(35, 35, 50, 0.8), rgba(25, 25, 35, 0.6));
+        }
+
+        .chunk-text { margin-bottom: 15px; font-size: 0.95rem; }
+        .chunk-id { font-family: var(--font-code); color: var(--accent-purple); font-size: 0.8rem; margin-bottom: 8px; display: block; }
+
+        /* Source 标记 & 标签 */
+        .meta-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+        .tag {
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.05);
+            color: var(--text-muted);
+        }
+
+        /* Source Tag (强化的需求) */
+        .source-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            background: rgba(0, 242, 255, 0.1);
+            border: 1px solid rgba(0, 242, 255, 0.2);
+            color: var(--accent-cyan);
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-family: var(--font-code);
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .source-tag:hover {
+            background: var(--accent-cyan);
+            color: #000;
+            box-shadow: 0 0 10px var(--accent-cyan);
+        }
+
+        /* 右下角操作区 */
+        .actions-area {
+            position: absolute;
+            bottom: 16px;
+            right: 24px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: 0.2s;
+            font-weight: 500;
+        }
+        .btn-ghost { background: transparent; color: var(--text-muted); }
+        .btn-ghost:hover { background: rgba(255,255,255,0.1); color: #fff; }
+        .btn-danger:hover { color: #ff4b4b; background: rgba(255, 75, 75, 0.1); }
+
+        .btn-primary {
+            background: var(--glass-highlight);
+            color: var(--text-main);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(4px);
+        }
+        .btn-primary:hover {
+            background: var(--accent-cyan);
+            color: #000;
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 15px rgba(0, 242, 255, 0.4);
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="app-shell">
+
+        <aside class="sidebar" id="sidebar">
+            <div class="logo">KNOWLEDGE<span style="color:var(--text-muted)">.OS</span></div>
+            <div class="upload-zone">
+                <div style="font-size:1.5rem; margin-bottom:8px;">+</div>
+                Drag & Drop Files
+            </div>
+
+            <div class="file-list-title">Active Sources</div>
+            <div class="file-item active">
+                <span class="file-name">📄 催收作业规范 V2.pdf</span>
+                <div class="file-info">
+                    <span style="color:var(--accent-purple)">Processing</span>
+                    <span>15 Chunks</span>
+                </div>
+            </div>
+            <div class="file-item">
+                <span class="file-name">📊 减免流程标准_Q3.xlsx</span>
+                <div class="file-info">
+                    <span style="color:var(--accent-success)">Ready</span>
+                    <span>8 Chunks</span>
+                </div>
+            </div>
+        </aside>
+
+        <div class="resizer resizer-x" id="resizer-sidebar"></div>
+
+        <main class="workspace">
+
+            <nav class="top-nav">
+                <div class="doc-header">
+                    催收作业规范 V2.pdf
+                    <span class="status-pill">● 知识切分审核中</span>
+                </div>
+                <div style="font-size:0.85rem; color:var(--text-muted); font-family:var(--font-code);">
+                    LAST_UPDATE: 10:42 AM
+                </div>
+            </nav>
+
+            <div class="comparison-view" id="comparison-area">
+
+                <div class="panel">
+                    <div class="panel-toolbar">
+                        <span>ORIGINAL SOURCE</span>
+                        <div class="page-navigator">
+                            <button class="page-btn" onclick="flipPage(-1)">❮</button>
+                            <span class="current-page" id="page-indicator">PAGE 03 / 12</span>
+                            <button class="page-btn" onclick="flipPage(1)">❯</button>
+                        </div>
+                    </div>
+                    <div class="panel-content" id="pdf-container">
+                        <div style="width:100%; height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; border:1px dashed rgba(255,255,255,0.1); border-radius:8px; color:var(--text-muted);">
+                            <span style="font-size:3rem; opacity:0.2;">PDF</span>
+                            <p style="margin-top:10px;">Rendering Page 3...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="resizer resizer-x"></div>
+
+                <div class="panel">
+                    <div class="panel-toolbar">
+                        <span>AI PARSED STREAM</span>
+                        <span style="color:var(--accent-success)">● CLEANED</span>
+                    </div>
+                    <div class="panel-content parsed-text" id="text-container">
+                        <h3>3.1 违规分级定义</h3>
+                        <p style="opacity:0.6; font-size:0.8rem; margin-bottom:20px;">[System Note] Page 3 headers removed.</p>
+                        <p>为规范作业行为，现定义违规等级如下：</p>
+                        <p><span class="highlight-mark">A级高风险违规</span>：指在与客户沟通中，出现<span class="highlight-mark">恐吓、威胁人身安全</span>或使用侮辱性词汇的行为。</p>
+                        <p>一旦触发A级违规，系统将自动阻断通话并生成工单。</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="resizer resizer-y" id="resizer-horizontal"></div>
+
+            <section class="knowledge-stream">
+                <div class="stream-header">
+                    <span class="stream-title">Extracted Knowledge (15)</span>
+                    <button class="btn btn-primary" style="padding: 6px 12px; font-size:0.75rem;">+ NEW CHUNK</button>
+                </div>
+
+                <div class="chunk-container">
+
+                    <div class="chunk-card">
+                        <span class="chunk-id">ID: CK-2025-001</span>
+                        <div class="chunk-text">
+                            催收作业人员不得对客户使用带有威胁、侮辱性或恐吓的言语。任何违反此规范的行为将被定性为 A 级高风险违规，需立即上报并处理。
+                        </div>
+                        <div class="meta-row">
+                            <div class="source-tag" onclick="jumpToPage(3)">
+                                📄 Page 3
+                            </div>
+                            <span class="tag"># 催收规范</span>
+                            <span class="tag"># A级违规</span>
+                        </div>
+                        <div class="actions-area">
+                            <button class="btn btn-ghost btn-danger">Delete</button>
+                            <button class="btn btn-ghost">Edit</button>
+                            <button class="btn btn-primary">Confirm</button>
+                        </div>
+                    </div>
+
+                    <div class="chunk-card">
+                        <span class="chunk-id">ID: CK-2025-002</span>
+                        <div class="chunk-text">
+                            减免流程需经客户经理、风控部门和总监三级审批。客户需提交近三个月的收入证明和财产证明作为附件。
+                        </div>
+                        <div class="meta-row">
+                            <div class="source-tag" onclick="jumpToPage(4)">
+                                📄 Page 4
+                            </div>
+                            <span class="tag"># 减免流程</span>
+                            <span class="tag"># 审批</span>
+                        </div>
+                        <div class="actions-area">
+                            <button class="btn btn-ghost btn-danger">Delete</button>
+                            <button class="btn btn-ghost">Edit</button>
+                            <button class="btn btn-primary">Confirm</button>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script>
+        // 1. 页码翻页模拟逻辑
+        let currentPage = 3;
+        function flipPage(direction) {
+            currentPage += direction;
+            if(currentPage < 1) currentPage = 1;
+            updatePageView();
+        }
+
+        function jumpToPage(page) {
+            currentPage = page;
+            updatePageView();
+        }
+
+        function updatePageView() {
+            // 更新导航器文字
+            const indicator = document.getElementById('page-indicator');
+            indicator.innerText = `PAGE ${currentPage.toString().padStart(2, '0')} / 12`;
+
+            // 简单模拟内容变化动画
+            const pdfContainer = document.getElementById('pdf-container');
+            const textContainer = document.getElementById('text-container');
+
+            pdfContainer.style.opacity = '0.5';
+            textContainer.style.opacity = '0.5';
+
+            setTimeout(() => {
+                pdfContainer.innerHTML = `
+                    <div style="width:100%; height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; border:1px dashed rgba(255,255,255,0.1); border-radius:8px; color:var(--text-muted);">
+                        <span style="font-size:3rem; opacity:0.2;">PDF</span>
+                        <p style="margin-top:10px;">Rendering Page ${currentPage}...</p>
+                    </div>`;
+
+                // 模拟不同页面的文字
+                if(currentPage === 3) {
+                     textContainer.innerHTML = `<h3>3.1 违规分级定义</h3><p>为规范作业行为，现定义违规等级如下...</p>`;
+                } else {
+                     textContainer.innerHTML = `<h3>Page ${currentPage} Content</h3><p>Loading parsed data stream for page ${currentPage}...</p>`;
+                }
+
+                pdfContainer.style.opacity = '1';
+                textContainer.style.opacity = '1';
+            }, 200);
+        }
+
+        // 2. 拖拽逻辑 (复用之前的稳定逻辑)
+        const makeResizable = function(resizer, prevSibling, isVertical) {
+            let x = 0; let y = 0; let prevSize = 0;
+            const mouseDownHandler = function(e) {
+                x = e.clientX; y = e.clientY;
+                const rect = prevSibling.getBoundingClientRect();
+                prevSize = isVertical ? rect.width : rect.height;
+                document.addEventListener('mousemove', mouseMoveHandler);
+                document.addEventListener('mouseup', mouseUpHandler);
+                // 添加高亮态
+                resizer.style.borderColor = 'var(--accent-cyan)';
+            };
+            const mouseMoveHandler = function(e) {
+                const dx = e.clientX - x;
+                const dy = e.clientY - y;
+                if (isVertical) prevSibling.style.width = `${prevSize + dx}px`;
+                else prevSibling.style.height = `${prevSize + dy}px`;
+            };
+            const mouseUpHandler = function() {
+                document.removeEventListener('mousemove', mouseMoveHandler);
+                document.removeEventListener('mouseup', mouseUpHandler);
+                resizer.style.borderColor = 'var(--glass-border)';
+            };
+            resizer.addEventListener('mousedown', mouseDownHandler);
+        };
+
+        makeResizable(document.getElementById('resizer-sidebar'), document.getElementById('sidebar'), true);
+        makeResizable(document.getElementById('resizer-horizontal'), document.getElementById('comparison-area'), false);
+    </script>
+</body>
+</html>
