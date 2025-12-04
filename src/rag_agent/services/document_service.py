@@ -10,6 +10,9 @@ from ..models import Document, DocumentStatus
 from ..database import DatabaseManager
 from ..config import RAG_CONFIG
 from ..parsers.pdf_parser import PDFParser
+from ..parsers.text_parser import TextParser
+from ..parsers.docx_parser import DocxParser
+from ..parsers.excel_parser import ExcelParser
 
 
 class DocumentService:
@@ -23,6 +26,9 @@ class DocumentService:
         self.pages_dir.mkdir(parents=True, exist_ok=True)
         # 初始化解析器
         self.pdf_parser = PDFParser(str(self.pages_dir))
+        self.text_parser = TextParser(str(self.pages_dir))
+        self.docx_parser = DocxParser(str(self.pages_dir))
+        self.excel_parser = ExcelParser(str(self.pages_dir))
     
     def upload_document(self, file, name: Optional[str] = None) -> Document:
         """上传文档"""
@@ -61,8 +67,8 @@ class DocumentService:
         
         # 保存到数据库
         if self.db.create_document(document):
-            # 如果是 PDF 文件，异步转换为图片（后台处理）
-            if file_ext == 'pdf':
+            # 如果文件支持转换为图片，异步转换为图片（后台处理）
+            if file_ext in ['pdf', 'txt', 'md', 'json', 'py', 'js', 'ts', 'html', 'css', 'docx', 'xlsx', 'xls']:
                 import threading
                 document.status = DocumentStatus.PROCESSING
                 self.db.update_document(document)
@@ -78,14 +84,44 @@ class DocumentService:
         输入: document - Document 对象
         """
         try:
-            print(f"[DocumentService] 开始转换文档为图片: {document.id}")
+            print(f"[DocumentService] 开始转换文档为图片: {document.id}, 类型: {document.file_type}")
             
-            # 使用 PDF 解析器转换
-            pages_info = self.pdf_parser.convert_to_images(
-                document.file_path,
-                document.id,
-                format='png'
-            )
+            pages_info = []
+            file_ext = document.file_type.lower()
+            
+            # 根据文件类型选择对应的解析器
+            if file_ext == 'pdf':
+                pages_info = self.pdf_parser.convert_to_images(
+                    document.file_path,
+                    document.id,
+                    format='png'
+                )
+            elif file_ext in ['txt', 'md', 'json', 'py', 'js', 'ts', 'html', 'css', 'log', 'yml', 'yaml', 'xml', 'csv']:
+                # 文本类文件
+                pages_info = self.text_parser.convert_to_images(
+                    document.file_path,
+                    document.id,
+                    format='png'
+                )
+            elif file_ext == 'docx':
+                # Word 文档
+                pages_info = self.docx_parser.convert_to_images(
+                    document.file_path,
+                    document.id,
+                    format='png'
+                )
+            elif file_ext in ['xlsx', 'xls']:
+                # Excel 文件
+                pages_info = self.excel_parser.convert_to_images(
+                    document.file_path,
+                    document.id,
+                    format='png'
+                )
+            else:
+                print(f"[DocumentService] 不支持的文件类型: {file_ext}")
+                document.status = DocumentStatus.FAILED
+                self.db.update_document(document)
+                return
             
             if not pages_info:
                 print(f"[DocumentService] 未生成任何页面图片")
@@ -125,8 +161,7 @@ class DocumentService:
         输入: document_id
         输出: Document 对象或 None
         """
-        # TODO: 从数据库查询并返回 Document
-        pass
+        return self.db.get_document(document_id)
     
     def list_documents(
         self, 
@@ -203,8 +238,13 @@ class DocumentService:
           - status: 新状态
         输出: 更新后的 Document 对象
         """
-        # TODO: 更新文档状态
-        pass
+        document = self.db.get_document(document_id)
+        if document:
+            document.status = status
+            document.updated_at = datetime.now()
+            if self.db.update_document(document):
+                return document
+        return None
     
     def update_chunks_count(self, document_id: str) -> bool:
         """
