@@ -1,21 +1,29 @@
-from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
+from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context, session, render_template, redirect, url_for
 from flask_cors import CORS
 import os
 import mimetypes
 import json
 import sys
+import secrets
 from agent.file_parser import parse_file, SUPPORTED_EXTS
 from agent.chat import get_chat_service
 from agent.intent_tools import smart_open_file_from_text
+from agent.database import create_user, authenticate_user, get_user_by_id, init_database
 
 # 初始化 Flask 应用
 app = Flask(__name__)
+# 配置 Session（用于登录状态管理）
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
 # 允许跨域请求 - 配置更详细的 CORS 选项
 CORS(app, resources={
     r"/*": {
         "origins": "*",
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
     }
 })
 
@@ -137,9 +145,50 @@ def resolve_file_path(filename: str) -> str | None:
 
 @app.route('/')
 def index():
-    """根路由：返回 index_v3.html 文件。"""
-    # 确保 index_v3.html 能够被正确找到并发送
-    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), 'templates/index.html')
+    """根路由：检查登录状态，未登录则跳转到登录页"""
+    if 'user_id' not in session:
+        return redirect(url_for('login_page'))
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/login')
+def login_page():
+    """登录页面"""
+    if 'user_id' in session:
+        return redirect(url_for('dashboard'))
+    return render_template('login.html')
+
+
+@app.route('/dashboard')
+def dashboard():
+    """仪表板页面（需要登录）"""
+    if 'user_id' not in session:
+        return redirect(url_for('login_page'))
+    return render_template('AppDashboard.html')
+
+
+@app.route('/sandbox')
+def sandbox():
+    """沙盒环境页面（需要登录）"""
+    if 'user_id' not in session:
+        return redirect(url_for('login_page'))
+    return render_template('index.html')
+
+
+@app.route('/knowledgebase')
+def knowledgebase():
+    """知识库页面（需要登录）"""
+    if 'user_id' not in session:
+        return redirect(url_for('login_page'))
+    return render_template('agent_knowledge_base.html')
+
+
+@app.route('/config')
+def config_dashboard():
+    """系统配置页面（需要登录）"""
+    if 'user_id' not in session:
+        return redirect(url_for('login_page'))
+    return render_template('config_dashboard.html')
 
 
 # --- API 路由 ---
@@ -557,11 +606,140 @@ def clear_chat_endpoint():
         return jsonify({"error": f"清除对话记录时发生错误: {str(e)}"}), 500
 
 
+# --- 用户认证相关路由 ---
+
+@app.route('/api/register', methods=['POST'])
+def register():
+    """用户注册"""
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        email = data.get('email', '').strip() or None
+        
+        if not username or not password:
+            return jsonify({"success": False, "message": "用户名和密码不能为空"}), 400
+        
+        if len(username) < 3:
+            return jsonify({"success": False, "message": "用户名至少需要3个字符"}), 400
+        
+        if len(password) < 6:
+            return jsonify({"success": False, "message": "密码至少需要6个字符"}), 400
+        
+        success, message = create_user(username, password, email)
+        
+        if success:
+            return jsonify({"success": True, "message": message}), 200
+        else:
+            return jsonify({"success": False, "message": message}), 400
+    
+    except Exception as e:
+        print(f"注册错误: {e}")
+        return jsonify({"success": False, "message": f"注册失败: {str(e)}"}), 500
+
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    """用户登录"""
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        
+        if not username or not password:
+            return jsonify({"success": False, "message": "用户名和密码不能为空"}), 400
+        
+        success, user_info, message = authenticate_user(username, password)
+        
+        if success and user_info:
+            # 设置 session
+            session['user_id'] = user_info['id']
+            session['username'] = user_info['username']
+            session['email'] = user_info.get('email')
+            
+            return jsonify({
+                "success": True,
+                "message": message,
+                "user": {
+                    "id": user_info['id'],
+                    "username": user_info['username'],
+                    "email": user_info.get('email')
+                }
+            }), 200
+        else:
+            return jsonify({"success": False, "message": message}), 401
+    
+    except Exception as e:
+        print(f"登录错误: {e}")
+        return jsonify({"success": False, "message": f"登录失败: {str(e)}"}), 500
+
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    """用户登出"""
+    try:
+        session.clear()
+        return jsonify({"success": True, "message": "已成功登出"}), 200
+    except Exception as e:
+        print(f"登出错误: {e}")
+        return jsonify({"success": False, "message": f"登出失败: {str(e)}"}), 500
+
+
+@app.route('/api/auth/check', methods=['GET'])
+def check_auth():
+    """检查当前登录状态"""
+    if 'user_id' in session:
+        user_info = get_user_by_id(session['user_id'])
+        if user_info:
+            return jsonify({
+                "authenticated": True,
+                "user": {
+                    "id": user_info['id'],
+                    "username": user_info['username'],
+                    "email": user_info.get('email')
+                }
+            }), 200
+    
+    return jsonify({"authenticated": False}), 200
+
+
 if __name__ == '__main__':
+    # 初始化数据库
+    init_database()
+    
+    # 检查 ASR 服务是否运行
+    import socket
+    def check_asr_service():
+        """检查 ASR 服务是否在运行"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('127.0.0.1', 5001))
+            sock.close()
+            return result == 0
+        except:
+            return False
+    
+    asr_running = check_asr_service()
+    
     print("----------------------------------------------------------")
     print("🚀 Sandbox OS Pro 后端服务已启动，请勿关闭此窗口！")
     print(f"📁 文件将存储在: {os.path.abspath(UPLOAD_FOLDER)}")
     print("🔗 API 正在监听: http://127.0.0.1:5000")
+    print("🔐 登录页面: http://127.0.0.1:5000/login")
+    print("📊 仪表板: http://127.0.0.1:5000/dashboard")
     print("----------------------------------------------------------")
+    if not asr_running:
+        print("⚠️  警告: ASR 服务未运行 (端口 5001)")
+        print("   语音识别功能将不可用。")
+        print("   请运行以下命令启动 ASR 服务：")
+        print("   python -m uvicorn agent.asr_server:app --host 0.0.0.0 --port 5001")
+        print("   或者使用 start_all.py 同时启动所有服务：")
+        print("   python start_all.py")
+        print("----------------------------------------------------------")
+    else:
+        print("✅ ASR 服务已运行: ws://127.0.0.1:5001/ws")
+        print("----------------------------------------------------------")
+    
     # 生产环境中应禁用 debug=True
     app.run(host='127.0.0.1', port=5000, debug=True)

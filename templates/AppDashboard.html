@@ -179,23 +179,32 @@
 
     <div class="launcher-content">
         <div class="header">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 20px;">
+                <div></div>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <span id="userInfo" style="color: var(--color-text-muted); font-size: 0.9rem;"></span>
+                    <button id="logoutBtn" style="background: rgba(126, 105, 240, 0.2); border: 1px solid var(--color-primary); color: var(--color-primary); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; transition: all 0.2s;">
+                        登出
+                    </button>
+                </div>
+            </div>
             <h1>Sandbox OS</h1>
             <p>选择一个环境开始工作</p>
         </div>
 
         <div class="card-container">
 
-            <a href="sandbox.html" class="app-card" id="sandbox-card">
+            <a href="/sandbox" class="app-card" id="sandbox-card">
                 <span class="card-icon">🧱</span>
                 <span class="card-title">沙盒环境</span>
             </a>
 
-            <a href="knowledgebase.html" class="app-card" id="kb-card">
+            <a href="/knowledgebase" class="app-card" id="kb-card">
                 <span class="card-icon">📚</span>
                 <span class="card-title">知识库</span>
             </a>
 
-            <a href="config.html" class="app-card" id="config-card">
+            <a href="/config" class="app-card" id="config-card">
                 <span class="card-icon">⚙️</span>
                 <span class="card-title">系统配置</span>
             </a>
@@ -287,6 +296,55 @@
             }
 
             animate();
+        });
+
+        // 登录状态检查和登出功能
+        const userInfo = document.getElementById('userInfo');
+        const logoutBtn = document.getElementById('logoutBtn');
+
+        // 检查登录状态
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/check', {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                
+                if (data.authenticated && data.user) {
+                    userInfo.textContent = `欢迎，${data.user.username}`;
+                } else {
+                    // 未登录，跳转到登录页
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error('检查登录状态错误:', error);
+                window.location.href = '/login';
+            }
+        }
+
+        // 登出
+        logoutBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/logout', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    window.location.href = '/login';
+                } else {
+                    alert('登出失败，请重试');
+                }
+            } catch (error) {
+                console.error('登出错误:', error);
+                alert('登出失败，请重试');
+            }
+        });
+
+        // 页面加载时检查登录状态
+        window.addEventListener('DOMContentLoaded', () => {
+            checkAuth();
         });
     </script>
 </body>

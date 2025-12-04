@@ -181,22 +181,47 @@
             <p>洞察数据未来，接入知识核心</p>
         </header>
 
-        <form action="#" method="post">
+        <form id="loginForm">
             <div class="input-group">
                 <input type="text" id="username" name="username" placeholder="用户名 / 邮箱" required>
             </div>
             <div class="input-group">
                 <input type="password" id="password" name="password" placeholder="密码" required>
             </div>
-            <button type="submit" class="btn-login">
+            <div id="errorMessage" style="color: #ff6b6b; font-size: 0.9rem; margin-bottom: 15px; display: none;"></div>
+            <button type="submit" class="btn-login" id="loginBtn">
                 登 录
             </button>
         </form>
 
         <footer class="footer-links">
-            <a href="#">忘记密码？</a>
-            <a href="#">注册新账号</a>
+            <a href="#" id="forgotPassword">忘记密码？</a>
+            <a href="#" id="registerLink">注册新账号</a>
         </footer>
+
+        <!-- 注册模态框 -->
+        <div id="registerModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center;">
+            <div style="background: var(--color-card-bg); padding: 40px; border-radius: var(--border-radius); max-width: 420px; width: 90%; position: relative;">
+                <button id="closeRegisterModal" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: var(--color-text-muted); font-size: 24px; cursor: pointer;">&times;</button>
+                <h2 style="color: var(--color-primary); margin-bottom: 25px; text-align: center;">注册新账号</h2>
+                <form id="registerForm">
+                    <div class="input-group">
+                        <input type="text" id="regUsername" name="username" placeholder="用户名（至少3个字符）" required>
+                    </div>
+                    <div class="input-group">
+                        <input type="email" id="regEmail" name="email" placeholder="邮箱（可选）">
+                    </div>
+                    <div class="input-group">
+                        <input type="password" id="regPassword" name="password" placeholder="密码（至少6个字符）" required>
+                    </div>
+                    <div id="registerErrorMessage" style="color: #ff6b6b; font-size: 0.9rem; margin-bottom: 15px; display: none;"></div>
+                    <div id="registerSuccessMessage" style="color: #51cf66; font-size: 0.9rem; margin-bottom: 15px; display: none;"></div>
+                    <button type="submit" class="btn-login" id="registerBtn">
+                        注册
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -282,6 +307,147 @@
             }
 
             animate();
+        });
+
+        // 登录表单处理
+        const loginForm = document.getElementById('loginForm');
+        const loginBtn = document.getElementById('loginBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        const registerLink = document.getElementById('registerLink');
+        const registerModal = document.getElementById('registerModal');
+        const closeRegisterModal = document.getElementById('closeRegisterModal');
+        const registerForm = document.getElementById('registerForm');
+        const registerErrorMessage = document.getElementById('registerErrorMessage');
+        const registerSuccessMessage = document.getElementById('registerSuccessMessage');
+
+        // 登录
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+
+            if (!username || !password) {
+                showError('请输入用户名和密码');
+                return;
+            }
+
+            loginBtn.disabled = true;
+            loginBtn.textContent = '登录中...';
+            errorMessage.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include', // 重要：包含 cookies
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // 登录成功，跳转到仪表板
+                    window.location.href = '/dashboard';
+                } else {
+                    showError(data.message || '登录失败');
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = '登 录';
+                }
+            } catch (error) {
+                console.error('登录错误:', error);
+                showError('网络错误，请稍后重试');
+                loginBtn.disabled = false;
+                loginBtn.textContent = '登 录';
+            }
+        });
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+
+        // 注册模态框
+        registerLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            registerModal.style.display = 'flex';
+        });
+
+        closeRegisterModal.addEventListener('click', () => {
+            registerModal.style.display = 'none';
+            registerForm.reset();
+            registerErrorMessage.style.display = 'none';
+            registerSuccessMessage.style.display = 'none';
+        });
+
+        // 注册表单处理
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('regUsername').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
+            const password = document.getElementById('regPassword').value.trim();
+
+            if (!username || !password) {
+                registerErrorMessage.textContent = '用户名和密码不能为空';
+                registerErrorMessage.style.display = 'block';
+                return;
+            }
+
+            const registerBtn = document.getElementById('registerBtn');
+            registerBtn.disabled = true;
+            registerBtn.textContent = '注册中...';
+            registerErrorMessage.style.display = 'none';
+            registerSuccessMessage.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ username, email: email || null, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    registerSuccessMessage.textContent = data.message + '，请登录';
+                    registerSuccessMessage.style.display = 'block';
+                    registerForm.reset();
+                    // 3秒后关闭模态框
+                    setTimeout(() => {
+                        registerModal.style.display = 'none';
+                        registerSuccessMessage.style.display = 'none';
+                    }, 2000);
+                } else {
+                    registerErrorMessage.textContent = data.message || '注册失败';
+                    registerErrorMessage.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('注册错误:', error);
+                registerErrorMessage.textContent = '网络错误，请稍后重试';
+                registerErrorMessage.style.display = 'block';
+            } finally {
+                registerBtn.disabled = false;
+                registerBtn.textContent = '注册';
+            }
+        });
+
+        // 检查是否已登录
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/api/auth/check', {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                if (data.authenticated) {
+                    window.location.href = '/dashboard';
+                }
+            } catch (error) {
+                console.error('检查登录状态错误:', error);
+            }
         });
     </script>
 </body>

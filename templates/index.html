@@ -356,7 +356,8 @@
     </aside>
 
     <script>
-        const API_BASE = 'http://127.0.0.1:5000';
+        // API 基础地址：使用当前页面的协议和主机，确保与页面地址一致
+        const API_BASE = `${window.location.protocol}//${window.location.host}`;
         const panel = document.getElementById('ai-panel');
         const wakeBtn = document.getElementById('wake-btn');
         const handle = document.getElementById('toggle-handle');
@@ -1168,14 +1169,14 @@
 
         // ========== ASR 实时语音识别功能 ==========
         
-        // 计算 ASR WebSocket 地址（与 temp 工程保持一致，便于线上通过反向代理暴露 /asr/ws）
+        // 计算 ASR WebSocket 地址（统一使用 127.0.0.1:5001）
         function getAsrWsUrl() {
             if (window.ASR_WS_URL) return window.ASR_WS_URL;
             const isHttps = location.protocol === 'https:';
             // HTTPS 场景建议由网关将 /asr/ws 转发到 5001 端口
             if (isHttps) return `wss://${location.host}/asr/ws`;
-            // 本地/HTTP 场景直接连 5001 端口
-            return `ws://${location.hostname}:5001/ws`;
+            // 本地/HTTP 场景：统一使用 127.0.0.1:5001，确保地址一致性
+            return `ws://127.0.0.1:5001/ws`;
         }
 
         // 初始化 ASR WebSocket 连接
