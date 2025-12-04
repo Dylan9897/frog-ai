@@ -29,16 +29,25 @@
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
 
         .app-container { display: flex; height: 100vh; width: 100vw; }
-        .sidebar { width: 260px; background-color: var(--bg-sidebar); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 24px 16px; z-index: 100; }
+        .sidebar { width: 260px; background-color: var(--bg-sidebar); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 24px 16px; z-index: 100; overflow: hidden; }
         .logo-area { font-size: 18px; font-weight: 700; color: var(--text-main); margin-bottom: 30px; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
         .logo-dot { width: 8px; height: 8px; background: var(--brand-primary); border-radius: 50%; box-shadow: 0 0 8px var(--brand-primary); }
         .btn-import { width: 100%; padding: 12px; border: 1px dashed var(--brand-primary); background: rgba(112, 89, 251, 0.05); color: var(--brand-primary); border-radius: 8px; cursor: pointer; transition: 0.3s; text-align: center; margin-bottom: 30px; font-size: 14px; position: relative; }
         .btn-import:hover { background: rgba(112, 89, 251, 0.15); box-shadow: 0 0 12px rgba(112, 89, 251, 0.2); }
         .btn-import.drag-over { background: rgba(112, 89, 251, 0.25); border-color: var(--brand-primary); border-style: solid; box-shadow: 0 0 20px rgba(112, 89, 251, 0.4); }
-        .file-list-header { font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; }
+        .search-box { width: 100%; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main); font-size: 13px; margin-bottom: 16px; transition: all 0.2s; }
+        .search-box:focus { outline: none; border-color: var(--brand-primary); background: rgba(112, 89, 251, 0.05); box-shadow: 0 0 8px rgba(112, 89, 251, 0.2); }
+        .search-box::placeholder { color: var(--text-secondary); }
+        .file-list-header { font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        #sidebar-file-list { flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0; }
+        #sidebar-file-list::-webkit-scrollbar { width: 6px; }
+        #sidebar-file-list::-webkit-scrollbar-track { background: transparent; }
+        #sidebar-file-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
+        #sidebar-file-list::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
         .file-item { padding: 12px 14px; border-radius: 8px; margin-bottom: 8px; transition: all 0.2s; border-left: 3px solid transparent; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         .file-item:hover { background: rgba(255,255,255,0.03); }
         .file-item.active { background: rgba(112, 89, 251, 0.1); border-left-color: var(--brand-primary); }
+        .file-item.hidden { display: none; }
         .file-item-content { flex: 1; cursor: pointer; min-width: 0; }
         .file-name { font-size: 14px; margin-bottom: 4px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .file-meta { font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between; }
@@ -120,7 +129,11 @@
                 <span style="font-size: 11px; opacity: 0.7;">或拖拽文件到此处</span>
             </div>
             <input type="file" id="file-input" style="display: none;" multiple accept=".pdf,.docx,.xlsx,.xls,.txt,.md,.json">
-            <div class="file-list-header">知识源列表 (<span id="file-count">0</span>)</div>
+            <input type="text" id="file-search" class="search-box" placeholder="🔍 搜索文档..." autocomplete="off">
+            <div class="file-list-header">
+                <span>知识源列表 (<span id="file-count">0</span>)</span>
+                <span id="search-result-count" style="font-size: 11px; color: var(--brand-primary); display: none;"></span>
+            </div>
             <div id="sidebar-file-list"></div>
         </aside>
 
@@ -178,7 +191,8 @@
             config: {
                 activeFileId: null, // 当前活跃文件 ID
                 files: [],
-                chunks: []
+                chunks: [],
+                searchKeyword: '' // 搜索关键词
             },
 
             // ------------------ 渲染模块 ------------------
@@ -186,17 +200,41 @@
             /** 渲染左侧文件列表 */
             renderSidebar: function() {
                 const list = document.getElementById('sidebar-file-list');
+                const searchKeyword = this.config.searchKeyword.toLowerCase().trim();
+                
+                // 过滤文件列表
+                const filteredFiles = searchKeyword 
+                    ? this.config.files.filter(file => file.name.toLowerCase().includes(searchKeyword))
+                    : this.config.files;
+                
                 document.getElementById('file-count').textContent = this.config.files.length;
+                
+                // 显示搜索结果数量
+                const searchResultCount = document.getElementById('search-result-count');
+                if (searchKeyword && filteredFiles.length !== this.config.files.length) {
+                    searchResultCount.textContent = `找到 ${filteredFiles.length} 个`;
+                    searchResultCount.style.display = 'inline';
+                } else {
+                    searchResultCount.style.display = 'none';
+                }
                 
                 if (this.config.files.length === 0) {
                     list.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 12px;">暂无文档，点击上方按钮上传</div>';
                     return;
                 }
                 
-                list.innerHTML = this.config.files.map(file => `
-                    <div class="file-item ${file.id === this.config.activeFileId ? 'active' : ''}">
+                if (filteredFiles.length === 0 && searchKeyword) {
+                    list.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 12px;">未找到匹配的文档</div>';
+                    return;
+                }
+                
+                list.innerHTML = this.config.files.map(file => {
+                    const isVisible = !searchKeyword || file.name.toLowerCase().includes(searchKeyword);
+                    const isActive = file.id === this.config.activeFileId;
+                    return `
+                    <div class="file-item ${isActive ? 'active' : ''} ${!isVisible ? 'hidden' : ''}">
                         <div class="file-item-content" onclick="KnowledgeOS.setActiveFile('${file.id}')">
-                            <span class="file-name">${file.name}</span>
+                            <span class="file-name">${this.highlightSearchKeyword(file.name, searchKeyword)}</span>
                             <div class="file-meta">
                                 <span style="color: ${file.status_color || 'var(--text-secondary)'};">
                                     <span class="status-dot" style="background:${file.status_color || 'var(--text-secondary)'}"></span>${this.getStatusText(file.status)}
@@ -206,7 +244,15 @@
                         </div>
                         <button class="action-link delete" data-doc-id="${file.id}" data-doc-name="${file.name.replace(/"/g, '&quot;')}" title="删除文档" style="flex-shrink: 0;">🗑</button>
                     </div>
-                `).join('');
+                `;
+                }).join('');
+            },
+            
+            /** 高亮搜索关键词 */
+            highlightSearchKeyword: function(text, keyword) {
+                if (!keyword) return text;
+                const regex = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                return text.replace(regex, '<mark style="background: rgba(112, 89, 251, 0.3); color: var(--brand-primary); padding: 0 2px; border-radius: 2px;">$1</mark>');
             },
             
             /** 获取状态文本 */
@@ -258,7 +304,7 @@
                 }
             },
             
-            /** 上传文档 */
+            /** 上传单个文档 */
             uploadDocument: async function(file) {
                 const formData = new FormData();
                 formData.append('file', file);
@@ -270,14 +316,49 @@
                     });
                     const data = await response.json();
                     if (data.success) {
-                        await this.loadDocuments();
-                        alert('文档上传成功');
+                        return { success: true, filename: file.name };
                     } else {
-                        alert('上传失败: ' + (data.error || '未知错误'));
+                        return { success: false, filename: file.name, error: data.error || '未知错误' };
                     }
                 } catch (error) {
                     console.error('上传失败:', error);
-                    alert('上传失败: ' + error.message);
+                    return { success: false, filename: file.name, error: error.message };
+                }
+            },
+            
+            /** 批量上传文档 */
+            uploadDocuments: async function(files) {
+                if (!files || files.length === 0) return;
+                
+                const results = [];
+                const total = files.length;
+                let successCount = 0;
+                let failCount = 0;
+                
+                // 逐个上传文件
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    const result = await this.uploadDocument(file);
+                    results.push(result);
+                    if (result.success) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                }
+                
+                // 重新加载文档列表
+                await this.loadDocuments();
+                
+                // 显示批量上传结果
+                if (successCount === total) {
+                    alert(`成功上传 ${successCount} 个文档`);
+                } else if (successCount > 0) {
+                    const failFiles = results.filter(r => !r.success).map(r => r.filename).join('\n');
+                    alert(`成功上传 ${successCount} 个文档\n失败 ${failCount} 个文档：\n${failFiles}`);
+                } else {
+                    const failFiles = results.filter(r => !r.success).map(r => `${r.filename}: ${r.error}`).join('\n');
+                    alert(`上传失败：\n${failFiles}`);
                 }
             },
             
@@ -503,7 +584,9 @@
                 const fileInput = document.getElementById('file-input');
                 fileInput.addEventListener('change', (e) => {
                     const files = Array.from(e.target.files);
-                    files.forEach(file => this.uploadDocument(file));
+                    if (files.length > 0) {
+                        this.uploadDocuments(files);
+                    }
                     e.target.value = ''; // 清空选择
                 });
 
@@ -534,17 +617,35 @@
                     });
                     
                     if (validFiles.length > 0) {
-                        validFiles.forEach(file => this.uploadDocument(file));
+                        this.uploadDocuments(validFiles);
                     } else if (files.length > 0) {
                         alert('不支持的文件类型，请上传 PDF、Word、Excel、文本等格式');
                     }
                 });
 
-                // 4. 绑定拖拽事件（调整大小）
+                // 4. 绑定搜索框
+                const searchBox = document.getElementById('file-search');
+                if (searchBox) {
+                    searchBox.addEventListener('input', (e) => {
+                        this.config.searchKeyword = e.target.value;
+                        this.renderSidebar();
+                    });
+                    
+                    // 支持 ESC 键清空搜索
+                    searchBox.addEventListener('keydown', (e) => {
+                        if (e.key === 'Escape') {
+                            searchBox.value = '';
+                            this.config.searchKeyword = '';
+                            this.renderSidebar();
+                        }
+                    });
+                }
+
+                // 5. 绑定拖拽事件（调整大小）
                 this.makeResizable(document.getElementById('resizer-sidebar'), document.getElementById('sidebar'), true);
                 this.makeResizable(document.getElementById('resizer-horizontal'), document.getElementById('comparison-area'), false);
 
-                // 5. 使用事件委托绑定删除按钮
+                // 6. 使用事件委托绑定删除按钮
                 const sidebar = document.getElementById('sidebar-file-list');
                 if (sidebar) {
                     sidebar.addEventListener('click', (e) => {
