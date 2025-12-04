@@ -84,7 +84,7 @@ def start_asr_server():
         
         import uvicorn
         import asyncio
-        from agent.asr_server import app
+        from src.agent.asr_server import app
         
         base_path = get_base_path()
         os.chdir(base_path)

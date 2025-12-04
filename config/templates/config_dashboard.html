@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sandbox OS - Model Configuration</title>
+    <style>
+        :root {
+            /* 核心色板 - 基于深紫与黑色的高级融合 */
+            --bg-deep: #050507;
+            --bg-glow: radial-gradient(circle at 50% -20%, #4c1d95 0%, #0f0720 40%, #050507 100%);
+
+            /* 玻璃拟态卡片 */
+            --glass-bg: rgba(20, 20, 25, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-highlight: rgba(255, 255, 255, 0.03);
+
+            /* 交互色 */
+            --primary: #8b5cf6;       /* 品牌紫 */
+            --primary-glow: rgba(139, 92, 246, 0.5);
+            --focus-ring: rgba(139, 92, 246, 0.25);
+
+            /* 文字系统 */
+            --text-main: #ffffff;
+            --text-sub: #9ca3af;
+            --text-muted: #6b7280;
+
+            /* 尺寸与圆角 */
+            --radius-box: 16px;
+            --radius-input: 10px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background-color: var(--bg-deep);
+            background-image: var(--bg-glow); /* 顶部紫色光晕 */
+            background-attachment: fixed;
+            background-size: cover;
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding-top: 60px;
+            padding-bottom: 60px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* --- 容器布局 --- */
+        .container {
+            width: 100%;
+            max-width: 720px; /* 限制宽度以保证阅读体验 */
+            margin: 0 20px;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* --- 头部区域 --- */
+        .header {
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, #fff, #c4b5fd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            color: var(--text-sub);
+            font-size: 14px;
+        }
+
+        /* --- 卡片通用样式 --- */
+        .card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-box);
+            padding: 30px;
+            margin-bottom: 24px;
+            backdrop-filter: blur(20px); /* 核心：磨砂玻璃效果 */
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        /* 卡片顶部的微光条 */
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 500;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* 状态指示灯 */
+        .status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background-color: #10b981; /* 绿色代表已连接 */
+            box-shadow: 0 0 10px #10b981;
+        }
+        .status-dot.inactive { background-color: var(--text-muted); box-shadow: none; }
+
+        .badge {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-sub);
+            border: 1px solid var(--glass-border);
+        }
+
+        /* --- 表单元素 --- */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .label {
+            display: block;
+            font-size: 13px;
+            color: var(--text-sub);
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="url"] {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-input);
+            padding: 12px 16px;
+            color: var(--text-main);
+            font-size: 14px;
+            transition: all 0.2s ease;
+            outline: none;
+        }
+
+        input::placeholder {
+            color: var(--text-muted);
+        }
+
+        input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--focus-ring);
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        /* 输入框内的图标（例如复制或显示密码） */
+        .input-icon {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 4px;
+            transition: color 0.2s;
+        }
+
+        .input-icon:hover {
+            color: var(--text-main);
+            background: rgba(255,255,255,0.05);
+        }
+
+        /* --- 底部操作栏 --- */
+        .actions {
+            margin-top: 40px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 16px;
+            padding-bottom: 40px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-sub);
+            border: 1px solid var(--glass-border);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+        }
+
+        .btn-primary:hover {
+            background: #7c3aed;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.6);
+        }
+
+        /* 装饰性网格背景 - 极其微弱 */
+        .grid-bg {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            z-index: -1;
+            pointer-events: none;
+            mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+            -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="grid-bg"></div>
+
+    <div class="container">
+
+        <header class="header">
+            <h1>模型配置中心</h1>
+            <p>Sandbox OS 智能体网关连接设置</p>
+        </header>
+
+        <form>
+
+            <div class="card">
+                <div class="section-header">
+                    <div class="section-title">
+                        <span class="status-dot"></span> 视觉语言模型 (VLM)
+                    </div>
+                    <span class="badge">GPT-4 Vision</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="label">服务端点 (Endpoint URL)</label>
+                    <div class="input-wrapper">
+                        <input type="url" value="https://api.openai.com/v1/chat/completions" placeholder="https://...">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="label">API Key</label>
+                    <div class="input-wrapper">
+                        <input type="password" value="sk-s8d7f6s8d7f6s8d7f6" placeholder="sk-...">
+                        <div class="input-icon">👁️</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="section-header">
+                    <div class="section-title">
+                        <span class="status-dot inactive"></span> 大语言模型 (LLM)
+                    </div>
+                    <span class="badge">Default</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="label">模型名称 (Model Name)</label>
+                    <input type="text" placeholder="例如: gpt-3.5-turbo, claude-3-opus">
+                </div>
+
+                <div class="form-group">
+                    <label class="label">服务端点 (Endpoint URL)</label>
+                    <input type="url" placeholder="https://api.openai.com/v1">
+                </div>
+
+                <div class="form-group">
+                    <label class="label">API Key</label>
+                    <div class="input-wrapper">
+                        <input type="password" placeholder="请输入 API Key">
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="section-header">
+                    <div class="section-title">
+                        <span class="status-dot inactive"></span>
+                        向量模型 (Embedding)
+                    </div>
+                    <span class="badge">RAG 专用</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="label">服务商 (Provider)</label>
+                    <input type="text" value="Text-Embedding-3-Small" readonly style="opacity: 0.7; cursor: not-allowed;">
+                </div>
+
+                <div class="form-group">
+                    <label class="label">独立鉴权 (Optional)</label>
+                    <div class="input-wrapper">
+                        <input type="password" placeholder="若留空则复用 LLM 密钥">
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button type="button" class="btn btn-secondary">恢复默认</button>
+                <button type="submit" class="btn btn-primary">保存配置</button>
+            </div>
+
+        </form>
+    </div>
+
+</body>
+</html>

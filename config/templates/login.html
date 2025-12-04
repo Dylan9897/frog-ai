@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sandbox OS - 登录</title>
+    <style>
+        /* 1. 核心颜色变量 */
+        :root {
+            --color-dark-bg: #1f1b34; /* 主背景：比之前略浅，以便容纳阴影 */
+            --color-card-bg: #2b2545; /* 卡片背景：略比主背景深 */
+            --color-primary: #7e69f0; /* 强调色：紫罗兰 */
+            --color-text-light: #ffffff;
+            --color-text-muted: #a097c0; /* 辅助文本 */
+            --border-radius: 16px; /* 较大的圆角，增强立体感 */
+        }
+
+        /* 2. 页面基础样式 */
+        body {
+            font-family: 'Microsoft YaHei', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--color-dark-bg);
+            color: var(--color-text-light);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 3. 登录卡片容器样式 - 轻量新拟态 */
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            background-color: var(--color-card-bg);
+            padding: 50px 40px;
+            border-radius: var(--border-radius);
+            text-align: center;
+            z-index: 10;
+            position: relative;
+
+            /* 新拟态核心：外凸阴影 */
+            box-shadow:
+                8px 8px 16px rgba(0, 0, 0, 0.4), /* 深色阴影 (右下) */
+                -8px -8px 16px rgba(60, 50, 90, 0.3); /* 浅色高光 (左上) */
+        }
+
+        /* 4. 标题与Logo */
+        .login-header {
+            margin-bottom: 35px;
+        }
+
+        .login-header h1 {
+            color: var(--color-primary);
+            font-size: 2.5rem;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .login-header p {
+            color: var(--color-text-muted);
+            font-size: 1rem;
+            margin: 0;
+            font-weight: 300;
+        }
+
+        /* 5. 表单样式 */
+        .input-group {
+            margin-bottom: 25px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 15px;
+            background-color: var(--color-dark-bg); /* 输入框背景使用主背景色 */
+            border: none;
+            border-radius: 12px;
+            color: var(--color-text-light);
+            font-size: 1rem;
+            box-sizing: border-box;
+
+            /* 新拟态核心：内凹阴影 */
+            box-shadow:
+                inset 4px 4px 8px rgba(0, 0, 0, 0.5), /* 阴影 */
+                inset -4px -4px 8px rgba(60, 50, 90, 0.2); /* 高光 */
+            transition: all 0.2s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            /* 聚焦时稍微降低内凹深度 */
+            box-shadow:
+                inset 2px 2px 4px rgba(0, 0, 0, 0.5),
+                inset -2px -2px 4px rgba(60, 50, 90, 0.2);
+            border: 1px solid var(--color-primary); /* 添加强调色边框辅助聚焦 */
+        }
+
+        .input-group input::placeholder {
+            color: var(--color-text-muted);
+        }
+
+        /* 6. 按钮样式 - 凸起效果 */
+        .btn-login {
+            width: 100%;
+            padding: 15px;
+            background-color: var(--color-primary);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: all 0.2s;
+
+            /* 按钮外凸阴影 */
+            box-shadow:
+                4px 4px 8px rgba(0, 0, 0, 0.4),
+                -4px -4px 8px rgba(126, 105, 240, 0.5);
+        }
+
+        .btn-login:active {
+            /* 按钮按下时变“平”或“内凹” */
+            background-color: #6a50ff;
+            box-shadow:
+                inset 4px 4px 8px rgba(0, 0, 0, 0.5),
+                inset -4px -4px 8px rgba(60, 50, 90, 0.2);
+        }
+
+        /* 7. 辅助链接 */
+        .footer-links {
+            margin-top: 30px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+        }
+
+        .footer-links a {
+            color: var(--color-text-muted);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: var(--color-primary);
+        }
+
+        /* 8. 神经网络背景 (保持上次版本的高性能 Canvas 连线) */
+        #network-bg {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            overflow: hidden;
+        }
+
+        .node {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: var(--color-primary);
+            border-radius: 50%;
+            opacity: 0.8;
+            transition: transform 0.1s ease-out;
+            /* 添加光晕效果 */
+            box-shadow: 0 0 10px 2px rgba(126, 105, 240, 0.8);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="network-bg"></div>
+
+    <div class="login-container">
+        <header class="login-header">
+            <h1>Sandbox OS</h1>
+            <p>洞察数据未来，接入知识核心</p>
+        </header>
+
+        <form id="loginForm">
+            <div class="input-group">
+                <input type="text" id="username" name="username" placeholder="用户名 / 邮箱" required>
+            </div>
+            <div class="input-group">
+                <input type="password" id="password" name="password" placeholder="密码" required>
+            </div>
+            <div id="errorMessage" style="color: #ff6b6b; font-size: 0.9rem; margin-bottom: 15px; display: none;"></div>
+            <button type="submit" class="btn-login" id="loginBtn">
+                登 录
+            </button>
+        </form>
+
+        <footer class="footer-links">
+            <a href="#" id="forgotPassword">忘记密码？</a>
+            <a href="#" id="registerLink">注册新账号</a>
+        </footer>
+
+        <!-- 注册模态框 -->
+        <div id="registerModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center;">
+            <div style="background: var(--color-card-bg); padding: 40px; border-radius: var(--border-radius); max-width: 420px; width: 90%; position: relative;">
+                <button id="closeRegisterModal" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: var(--color-text-muted); font-size: 24px; cursor: pointer;">&times;</button>
+                <h2 style="color: var(--color-primary); margin-bottom: 25px; text-align: center;">注册新账号</h2>
+                <form id="registerForm">
+                    <div class="input-group">
+                        <input type="text" id="regUsername" name="username" placeholder="用户名（至少3个字符）" required>
+                    </div>
+                    <div class="input-group">
+                        <input type="email" id="regEmail" name="email" placeholder="邮箱（可选）">
+                    </div>
+                    <div class="input-group">
+                        <input type="password" id="regPassword" name="password" placeholder="密码（至少6个字符）" required>
+                    </div>
+                    <div id="registerErrorMessage" style="color: #ff6b6b; font-size: 0.9rem; margin-bottom: 15px; display: none;"></div>
+                    <div id="registerSuccessMessage" style="color: #51cf66; font-size: 0.9rem; margin-bottom: 15px; display: none;"></div>
+                    <button type="submit" class="btn-login" id="registerBtn">
+                        注册
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('network-bg');
+            const numNodes = 40;
+            const nodes = [];
+            const maxDistance = 150;
+            const nodeSize = 6;
+
+            // Canvas setup
+            const canvas = document.createElement('canvas');
+            canvas.style.position = 'absolute';
+            canvas.style.top = 0;
+            canvas.style.left = 0;
+            container.appendChild(canvas);
+            const ctx = canvas.getContext('2d');
+
+            function resizeCanvas() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            // 1. 生成节点对象并添加到DOM
+            for (let i = 0; i < numNodes; i++) {
+                const node = document.createElement('div');
+                node.classList.add('node');
+
+                const x = Math.random() * window.innerWidth;
+                const y = Math.random() * window.innerHeight;
+
+                const nodeData = {
+                    element: node,
+                    x: x,
+                    y: y,
+                    // 随机速度
+                    vx: (Math.random() - 0.5) * 0.4,
+                    vy: (Math.random() - 0.5) * 0.4
+                };
+                nodes.push(nodeData);
+                container.appendChild(node);
+            }
+
+            // 2. 动画循环
+            function animate() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                for (let i = 0; i < nodes.length; i++) {
+                    const nodeA = nodes[i];
+
+                    // 更新位置 (边界反弹)
+                    nodeA.x += nodeA.vx;
+                    nodeA.y += nodeA.vy;
+
+                    if (nodeA.x < 0 || nodeA.x > canvas.width) nodeA.vx *= -1;
+                    if (nodeA.y < 0 || nodeA.y > canvas.height) nodeA.vy *= -1;
+
+                    // 更新DOM位置
+                    nodeA.element.style.transform = `translate(${nodeA.x - nodeSize / 2}px, ${nodeA.y - nodeSize / 2}px)`;
+
+                    // 绘制连线
+                    for (let j = i + 1; j < nodes.length; j++) {
+                        const nodeB = nodes[j];
+                        const dx = nodeA.x - nodeB.x;
+                        const dy = nodeA.y - nodeB.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distance < maxDistance) {
+                            const opacity = 1 - (distance / maxDistance);
+                            ctx.beginPath();
+                            // 连线颜色略微变浅，增加深度感
+                            ctx.strokeStyle = `rgba(126, 105, 240, ${opacity * 0.5})`;
+                            ctx.lineWidth = 1;
+                            ctx.moveTo(nodeA.x, nodeA.y);
+                            ctx.lineTo(nodeB.x, nodeB.y);
+                            ctx.stroke();
+                        }
+                    }
+                }
+                requestAnimationFrame(animate);
+            }
+
+            animate();
+        });
+
+        // 登录表单处理
+        const loginForm = document.getElementById('loginForm');
+        const loginBtn = document.getElementById('loginBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        const registerLink = document.getElementById('registerLink');
+        const registerModal = document.getElementById('registerModal');
+        const closeRegisterModal = document.getElementById('closeRegisterModal');
+        const registerForm = document.getElementById('registerForm');
+        const registerErrorMessage = document.getElementById('registerErrorMessage');
+        const registerSuccessMessage = document.getElementById('registerSuccessMessage');
+
+        // 登录
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+
+            if (!username || !password) {
+                showError('请输入用户名和密码');
+                return;
+            }
+
+            loginBtn.disabled = true;
+            loginBtn.textContent = '登录中...';
+            errorMessage.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include', // 重要：包含 cookies
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // 登录成功，跳转到仪表板
+                    window.location.href = '/dashboard';
+                } else {
+                    showError(data.message || '登录失败');
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = '登 录';
+                }
+            } catch (error) {
+                console.error('登录错误:', error);
+                showError('网络错误，请稍后重试');
+                loginBtn.disabled = false;
+                loginBtn.textContent = '登 录';
+            }
+        });
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+
+        // 注册模态框
+        registerLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            registerModal.style.display = 'flex';
+        });
+
+        closeRegisterModal.addEventListener('click', () => {
+            registerModal.style.display = 'none';
+            registerForm.reset();
+            registerErrorMessage.style.display = 'none';
+            registerSuccessMessage.style.display = 'none';
+        });
+
+        // 注册表单处理
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('regUsername').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
+            const password = document.getElementById('regPassword').value.trim();
+
+            if (!username || !password) {
+                registerErrorMessage.textContent = '用户名和密码不能为空';
+                registerErrorMessage.style.display = 'block';
+                return;
+            }
+
+            const registerBtn = document.getElementById('registerBtn');
+            registerBtn.disabled = true;
+            registerBtn.textContent = '注册中...';
+            registerErrorMessage.style.display = 'none';
+            registerSuccessMessage.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ username, email: email || null, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    registerSuccessMessage.textContent = data.message + '，请登录';
+                    registerSuccessMessage.style.display = 'block';
+                    registerForm.reset();
+                    // 3秒后关闭模态框
+                    setTimeout(() => {
+                        registerModal.style.display = 'none';
+                        registerSuccessMessage.style.display = 'none';
+                    }, 2000);
+                } else {
+                    registerErrorMessage.textContent = data.message || '注册失败';
+                    registerErrorMessage.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('注册错误:', error);
+                registerErrorMessage.textContent = '网络错误，请稍后重试';
+                registerErrorMessage.style.display = 'block';
+            } finally {
+                registerBtn.disabled = false;
+                registerBtn.textContent = '注册';
+            }
+        });
+
+        // 检查是否已登录
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/api/auth/check', {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                if (data.authenticated) {
+                    window.location.href = '/dashboard';
+                }
+            } catch (error) {
+                console.error('检查登录状态错误:', error);
+            }
+        });
+    </script>
+</body>
+</html>

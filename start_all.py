@@ -26,7 +26,7 @@ def start_services():
         # 启动 ASR 服务
         print("[启动] ASR 服务...")
         asr_process = subprocess.Popen(
-            [sys.executable, "-m", "uvicorn", "agent.asr_server:app", "--host", "0.0.0.0", "--port", "5001"],
+            [sys.executable, "-m", "uvicorn", "src.agent.asr_server:app", "--host", "0.0.0.0", "--port", "5001"],
             cwd=os.path.dirname(os.path.abspath(__file__))
         )
         processes.append(("ASR", asr_process))

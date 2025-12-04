@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge OS - 知识库智能工作台 V8.1 (Refactored)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* CSS 保持 V8.0 “星云”风格，确保视觉一致性 */
+        :root {
+            --bg-universe: #0b0c15;
+            --bg-sidebar: #12131f;
+            --bg-card: #1c1d2e;
+            --bg-card-hover: #232438;
+            --border-color: rgba(112, 112, 155, 0.15);
+            --brand-primary: #7059fb;
+            --brand-cyan: #00f0ff;
+            --brand-success: #00d2b6;
+            --brand-warning: #ffb86c;
+            --text-main: #ffffff;
+            --text-secondary: #8f9bb3;
+            --radius-lg: 12px;
+        }
+
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; font-family: 'Noto Sans SC', sans-serif; background-color: var(--bg-universe); color: var(--text-main); height: 100vh; overflow: hidden; background-image: radial-gradient(circle at 15% 50%, rgba(112, 89, 251, 0.08), transparent 25%), radial-gradient(circle at 85% 30%, rgba(0, 240, 255, 0.05), transparent 25%); }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+        .app-container { display: flex; height: 100vh; width: 100vw; }
+        .sidebar { width: 260px; background-color: var(--bg-sidebar); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 24px 16px; z-index: 100; }
+        .logo-area { font-size: 18px; font-weight: 700; color: var(--text-main); margin-bottom: 30px; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
+        .logo-dot { width: 8px; height: 8px; background: var(--brand-primary); border-radius: 50%; box-shadow: 0 0 8px var(--brand-primary); }
+        .btn-import { width: 100%; padding: 12px; border: 1px dashed var(--brand-primary); background: rgba(112, 89, 251, 0.05); color: var(--brand-primary); border-radius: 8px; cursor: pointer; transition: 0.3s; text-align: center; margin-bottom: 30px; font-size: 14px; position: relative; }
+        .btn-import:hover { background: rgba(112, 89, 251, 0.15); box-shadow: 0 0 12px rgba(112, 89, 251, 0.2); }
+        .btn-import.drag-over { background: rgba(112, 89, 251, 0.25); border-color: var(--brand-primary); border-style: solid; box-shadow: 0 0 20px rgba(112, 89, 251, 0.4); }
+        .file-list-header { font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; }
+        .file-item { padding: 12px 14px; border-radius: 8px; margin-bottom: 8px; transition: all 0.2s; border-left: 3px solid transparent; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .file-item:hover { background: rgba(255,255,255,0.03); }
+        .file-item.active { background: rgba(112, 89, 251, 0.1); border-left-color: var(--brand-primary); }
+        .file-item-content { flex: 1; cursor: pointer; min-width: 0; }
+        .file-name { font-size: 14px; margin-bottom: 4px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .file-meta { font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between; }
+        .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; }
+
+        .main-workspace { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        .top-header { height: 60px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: rgba(18, 19, 31, 0.8); backdrop-filter: blur(10px); }
+        .doc-title { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 12px; }
+        .status-badge { font-size: 12px; padding: 4px 10px; background: rgba(255, 184, 108, 0.1); color: var(--brand-warning); border: 1px solid rgba(255, 184, 108, 0.3); border-radius: 20px; }
+        .last-update { font-size: 12px; color: var(--text-secondary); }
+
+        .resizer { background: transparent; z-index: 50; transition: 0.2s; }
+        .resizer-x { width: 5px; cursor: col-resize; border-left: 1px solid transparent; }
+        .resizer-y { height: 5px; cursor: row-resize; border-top: 1px solid transparent; }
+        .resizer:hover { border-color: var(--brand-primary); }
+
+        .comparison-container { height: 55%; display: flex; background-color: var(--bg-universe); }
+        .panel { flex: 1; display: flex; flex-direction: column; background-color: var(--bg-universe); border-right: 1px solid var(--border-color); }
+        .panel:last-child { border-right: none; }
+
+        .panel-header { height: 40px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; background: rgba(28, 29, 46, 0.5); border-bottom: 1px solid var(--border-color); font-size: 12px; color: var(--text-secondary); font-weight: 600; }
+        .header-action { color: var(--brand-primary); cursor: pointer; }
+
+        .panel-body { flex: 1; position: relative; overflow: hidden; padding: 0; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s; }
+        .panel-body.scrollable { overflow: auto; align-items: flex-start; justify-content: flex-start; }
+        .panel-body.highlighted { background-color: rgba(0, 240, 255, 0.08); } /* 跳转高亮效果 */
+
+        .pdf-image-mock { max-width: 100%; max-height: 100%; object-fit: contain; transition: all 0.3s; width: 80%; height: 80%; background: #26273b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #586075; border: 1px dashed rgba(255,255,255,0.1); }
+        .pdf-image-mock.zoomed { max-width: none; max-height: none; width: 150%; }
+
+        .text-stream-content { padding: 30px; overflow-y: auto; color: #d1d5db; font-size: 14px; line-height: 1.8; }
+        .text-stream-content h3 { color: var(--text-main); margin-top: 0; font-size: 18px; }
+        .highlight-text { color: var(--brand-cyan); border-bottom: 1px dashed var(--brand-cyan); padding-bottom: 1px; }
+
+        .chunks-container {
+            flex-grow: 1;
+            background-color: rgba(18, 19, 31, 0.6);
+            display: flex;
+            flex-direction: column;
+            border-top: 1px solid var(--border-color);
+            /* 🚀 优化 1: 解除拖拽限制，允许被压缩到最小高度 */
+            min-height: 0;
+        }
+        .chunks-header { padding: 15px 24px; display: flex; justify-content: space-between; align-items: center; }
+        .section-title { font-size: 14px; font-weight: 700; color: var(--text-secondary); }
+        .btn-create { background: var(--brand-primary); color: #fff; border: none; padding: 6px 16px; border-radius: 4px; font-size: 12px; cursor: pointer; box-shadow: 0 2px 10px rgba(112, 89, 251, 0.3); transition: 0.2s; }
+
+        .chunks-list { flex: 1; padding: 0 24px 30px 24px; overflow-y: auto; }
+        .chunk-card { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 16px; position: relative; transition: all 0.3s; }
+        .chunk-card:hover { border-color: var(--brand-primary); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4); background-color: var(--bg-card-hover); }
+        .chunk-id { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; display: block; }
+        .chunk-content { font-size: 14px; color: var(--text-main); margin-bottom: 20px; line-height: 1.6; }
+
+        .chunk-footer { display: flex; align-items: center; justify-content: space-between; }
+        .tags-group { display: flex; gap: 8px; align-items: center; }
+        .tag { background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 4px; font-size: 12px; color: var(--text-secondary); }
+
+        .source-btn { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; background: rgba(112, 89, 251, 0.1); border: 1px solid rgba(112, 89, 251, 0.3); color: var(--brand-primary); border-radius: 4px; font-size: 12px; cursor: pointer; transition: 0.2s; }
+        .source-btn:hover { background: var(--brand-primary); color: #fff; }
+
+        .actions-group { display: flex; gap: 12px; }
+        .action-link { font-size: 12px; cursor: pointer; color: var(--text-secondary); transition: 0.2s; background: transparent; border: none; display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 4px; }
+        .action-link:hover { color: var(--text-main); background: rgba(255,255,255,0.05); }
+        .action-link.delete { color: var(--text-secondary); font-size: 14px; padding: 6px 8px; }
+        .action-link.delete:hover { color: #ff4757; background: rgba(255, 71, 87, 0.15); }
+
+        .btn-confirm { background: rgba(0, 210, 182, 0.1); color: var(--brand-success); border: 1px solid rgba(0, 210, 182, 0.3); padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; transition: 0.2s; }
+        .btn-confirm:hover { background: var(--brand-success); color: #000; }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+
+        <aside class="sidebar" id="sidebar">
+            <div class="logo-area"><div class="logo-dot"></div>Sandbox OS</div>
+            <div class="btn-import" id="import-zone" onclick="document.getElementById('file-input').click()">
+                + 导入新文档<br>
+                <span style="font-size: 11px; opacity: 0.7;">或拖拽文件到此处</span>
+            </div>
+            <input type="file" id="file-input" style="display: none;" multiple accept=".pdf,.docx,.xlsx,.xls,.txt,.md,.json">
+            <div class="file-list-header">知识源列表 (<span id="file-count">0</span>)</div>
+            <div id="sidebar-file-list"></div>
+        </aside>
+
+        <div class="resizer resizer-x" id="resizer-sidebar"></div>
+
+        <main class="main-workspace">
+            <header class="top-header">
+                <div class="doc-title" id="doc-title-display"></div>
+                <div class="last-update">最后更新: 10分钟前</div>
+            </header>
+
+            <section class="comparison-container" id="comparison-area">
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <span>原文档视图 (PDF)</span>
+                        <div class="header-action" onclick="KnowledgeOS.toggleZoom()">🔍 缩放视图 (测试滚动条)</div>
+                    </div>
+                    <div class="panel-body" id="pdf-wrapper">
+                        <div class="pdf-image-mock" id="pdf-content"></div>
+                    </div>
+                </div>
+
+                <div class="resizer resizer-x" id="resizer-panel"></div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <span>解析文本流 (AI 清洗)</span>
+                        <span style="color: var(--brand-cyan)">● 已完成清洗</span>
+                    </div>
+                    <div class="text-stream-content" id="parsed-text-content"></div>
+                </div>
+            </section>
+
+            <div class="resizer resizer-y" id="resizer-horizontal"></div>
+
+            <section class="chunks-container">
+                <div class="chunks-header">
+                    <span class="section-title" id="chunks-section-title">知识切片列表 (共 0 条)</span>
+                    <button class="btn-create">✨ 创建新切片</button>
+                </div>
+                <div class="chunks-list" id="chunks-list"></div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        // =========================================================
+        //                 KNOWLEDGE OS API (V8.1)
+        // =========================================================
+        const KnowledgeOS = {
+            // ------------------ 接口配置 ------------------
+            API_BASE: `${window.location.protocol}//${window.location.host}`,
+            
+            config: {
+                activeFileId: null, // 当前活跃文件 ID
+                files: [],
+                chunks: []
+            },
+
+            // ------------------ 渲染模块 ------------------
+
+            /** 渲染左侧文件列表 */
+            renderSidebar: function() {
+                const list = document.getElementById('sidebar-file-list');
+                document.getElementById('file-count').textContent = this.config.files.length;
+                
+                if (this.config.files.length === 0) {
+                    list.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 12px;">暂无文档，点击上方按钮上传</div>';
+                    return;
+                }
+                
+                list.innerHTML = this.config.files.map(file => `
+                    <div class="file-item ${file.id === this.config.activeFileId ? 'active' : ''}">
+                        <div class="file-item-content" onclick="KnowledgeOS.setActiveFile('${file.id}')">
+                            <span class="file-name">${file.name}</span>
+                            <div class="file-meta">
+                                <span style="color: ${file.status_color || 'var(--text-secondary)'};">
+                                    <span class="status-dot" style="background:${file.status_color || 'var(--text-secondary)'}"></span>${this.getStatusText(file.status)}
+                                </span>
+                                <span>${file.chunks_count || 0} 切片</span>
+                            </div>
+                        </div>
+                        <button class="action-link delete" onclick="event.stopPropagation(); event.preventDefault(); KnowledgeOS.deleteDocument('${file.id}', ${JSON.stringify(file.name)})" title="删除文档" style="flex-shrink: 0;">🗑</button>
+                    </div>
+                `).join('');
+            },
+            
+            /** 获取状态文本 */
+            getStatusText: function(status) {
+                const statusMap = {
+                    'pending': '待审核',
+                    'processing': '处理中',
+                    'completed': '已入库',
+                    'archived': '已归档',
+                    'failed': '失败'
+                };
+                return statusMap[status] || status;
+            },
+            
+            /** 加载文档列表 */
+            loadDocuments: async function() {
+                try {
+                    const response = await fetch(`${this.API_BASE}/api/rag/documents`);
+                    const data = await response.json();
+                    if (data.success) {
+                        this.config.files = data.documents;
+                        this.renderSidebar();
+                        if (this.config.files.length > 0 && !this.config.activeFileId) {
+                            this.setActiveFile(this.config.files[0].id);
+                        }
+                    }
+                } catch (error) {
+                    console.error('加载文档列表失败:', error);
+                }
+            },
+            
+            /** 上传文档 */
+            uploadDocument: async function(file) {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                try {
+                    const response = await fetch(`${this.API_BASE}/api/rag/documents/upload`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        await this.loadDocuments();
+                        alert('文档上传成功');
+                    } else {
+                        alert('上传失败: ' + (data.error || '未知错误'));
+                    }
+                } catch (error) {
+                    console.error('上传失败:', error);
+                    alert('上传失败: ' + error.message);
+                }
+            },
+            
+            /** 删除文档 */
+            deleteDocument: async function(documentId, documentName) {
+                if (!confirm(`确定要删除文档 "${documentName}" 吗？\n此操作将同时删除相关的所有切片，且无法恢复。`)) {
+                    return;
+                }
+                
+                try {
+                    console.log(`正在删除文档: ${documentId}`);
+                    const response = await fetch(`${this.API_BASE}/api/rag/documents/${documentId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    console.log('删除响应:', data);
+                    
+                    if (data.success) {
+                        // 如果删除的是当前活跃文件，清空活跃状态
+                        if (this.config.activeFileId === documentId) {
+                            this.config.activeFileId = null;
+                            document.getElementById('doc-title-display').innerHTML = '';
+                            this.config.chunks = [];
+                            this.renderChunks();
+                            this.renderPDFAndParsedText(1);
+                        }
+                        // 重新加载文档列表
+                        await this.loadDocuments();
+                        alert('文档删除成功');
+                    } else {
+                        alert('删除失败: ' + (data.error || '未知错误'));
+                    }
+                } catch (error) {
+                    console.error('删除失败:', error);
+                    alert('删除失败: ' + error.message);
+                }
+            },
+
+            /** 渲染知识切片列表 */
+            renderChunks: function() {
+                const list = document.getElementById('chunks-list');
+                document.getElementById('chunks-section-title').innerText = `知识切片列表 (共 ${this.config.chunks.length} 条)`;
+
+                if (this.config.chunks.length === 0) {
+                    list.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">暂无知识切片</div>';
+                    return;
+                }
+
+                list.innerHTML = this.config.chunks.map(chunk => `
+                    <div class="chunk-card">
+                        <span class="chunk-id">ID: ${chunk.id}</span>
+                        <div class="chunk-content">${chunk.content}</div>
+                        <div class="chunk-footer">
+                            <div class="tags-group">
+                                ${(chunk.tags || []).map(tag => `<span class="tag">${tag}</span>`).join('')}
+                                ${chunk.source_page ? `<div class="source-btn" onclick="KnowledgeOS.jumpToPage(${chunk.source_page})">📄 来源: 第 ${chunk.source_page} 页</div>` : ''}
+                            </div>
+                            <div class="actions-group">
+                                <button class="action-link delete">🗑 删除</button>
+                                <button class="action-link">✏️ 修改</button>
+                                <button class="btn-confirm">✔ 确认入库</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            },
+
+            /** 渲染 PDF/解析文本内容 (模拟) */
+            renderPDFAndParsedText: function(page = 3) {
+                const pdfContent = document.getElementById('pdf-content');
+                const parsedText = document.getElementById('parsed-text-content');
+
+                // 模拟 PDF 渲染
+                pdfContent.innerHTML = `[ PDF 预览区域 ]<br>第 ${page} 页`;
+
+                // 模拟解析文本渲染
+                parsedText.innerHTML = `
+                    <h3>第 ${page} 页内容概要</h3>
+                    <p style="opacity: 0.6; font-size: 12px; margin-bottom: 20px;">[系统提示] 成功加载 ${this.config.activeFileId} 的第 ${page} 页内容。</p>
+                    <p>这是从文档中解析出的核心文本。具体切片来自这里... </p>
+                    <p>（此处模拟该页面的解析内容）</p>
+                `;
+            },
+
+            // ------------------ 交互方法 ------------------
+
+            /** 切换活跃文件 */
+            setActiveFile: function(fileId) {
+                if (this.config.activeFileId !== fileId) {
+                    this.config.activeFileId = fileId;
+                    const activeFile = this.config.files.find(f => f.id === fileId);
+                    if (activeFile) {
+                        this.renderSidebar();
+                        this.renderChunks();
+                        this.renderPDFAndParsedText(1);
+                        document.getElementById('doc-title-display').innerHTML = `${activeFile.name} <span class="status-badge">知识切分审核中</span>`;
+                        console.log(`文件已切换到: ${fileId}`);
+                    }
+                }
+            },
+
+            /**
+             * [核心功能点 1] 点击知识库卡片的来源时，原文档视图 (PDF)跳转至对应的页面。
+             * @param {number} page - 要跳转的目标页码。
+             */
+            jumpToPage: function(page) {
+                const pdfWrapper = document.getElementById('pdf-wrapper');
+
+                // 1. 更新 PDF 视图内容
+                this.renderPDFAndParsedText(page);
+
+                // 2. 添加视觉高亮反馈
+                pdfWrapper.classList.add('highlighted');
+                setTimeout(() => {
+                    pdfWrapper.classList.remove('highlighted');
+                }, 800);
+
+                // 3. 确保 PDF 视图回到非缩放状态 (重置滚动条)
+                const pdfContent = document.getElementById('pdf-content');
+                if (pdfContent.classList.contains('zoomed')) {
+                    this.toggleZoom();
+                }
+
+                console.log(`已跳转至 PDF 第 ${page} 页`);
+            },
+
+            /** 切换缩放状态 (智能滚动条) */
+            toggleZoom: function() {
+                const wrapper = document.getElementById('pdf-wrapper');
+                const content = document.getElementById('pdf-content');
+
+                content.classList.toggle('zoomed');
+                wrapper.classList.toggle('scrollable', content.classList.contains('zoomed'));
+
+                if (!content.classList.contains('zoomed')) {
+                    wrapper.scrollTop = 0;
+                    wrapper.scrollLeft = 0;
+                }
+            },
+
+            // ------------------ 初始化和辅助工具 ------------------
+
+            /** 模块拖拽调整大小逻辑 (🚀 优化 2: 使用 requestAnimationFrame 提高流畅度) */
+            makeResizable: function(resizer, prevSibling, isVertical) {
+                let x = 0;
+                let y = 0;
+                let prevSize = 0;
+                let animationFrameId = null; // 用于存储 rAF 句柄
+
+                const updateSize = function(dx, dy) {
+                    if (isVertical) {
+                        // 确保最小宽度，防止拖到看不见 (侧边栏最小 100px)
+                        const newWidth = Math.max(100, prevSize + dx);
+                        prevSibling.style.width = `${newWidth}px`;
+                    } else {
+                        // 确保最小高度 (对比视图最小 100px)
+                        const newHeight = Math.max(100, prevSize + dy);
+                        // 当拖拽改变 height 时，flex 布局会自动调整下方 content 的大小
+                        prevSibling.style.height = `${newHeight}px`;
+                    }
+                    animationFrameId = null;
+                };
+
+                const mouseMoveHandler = function(e) {
+                    const dx = e.clientX - x;
+                    const dy = e.clientY - y;
+
+                    // 只有在没有等待的动画帧时才请求新的帧
+                    if (animationFrameId === null) {
+                        animationFrameId = window.requestAnimationFrame(() => updateSize(dx, dy));
+                    }
+                };
+
+                const mouseDownHandler = function(e) {
+                    e.preventDefault(); // 阻止文本选择
+                    x = e.clientX;
+                    y = e.clientY;
+                    const rect = prevSibling.getBoundingClientRect();
+                    prevSize = isVertical ? rect.width : rect.height;
+
+                    document.addEventListener('mousemove', mouseMoveHandler);
+                    document.addEventListener('mouseup', mouseUpHandler);
+                    resizer.style.borderColor = 'var(--brand-primary)';
+                    // 拖拽时，设置全局光标以提高体验
+                    document.body.style.cursor = isVertical ? 'col-resize' : 'row-resize';
+                };
+
+                const mouseUpHandler = function() {
+                    document.removeEventListener('mousemove', mouseMoveHandler);
+                    document.removeEventListener('mouseup', mouseUpHandler);
+                    resizer.style.borderColor = 'transparent';
+                    document.body.style.cursor = ''; // 恢复默认光标
+                    if (animationFrameId) {
+                        cancelAnimationFrame(animationFrameId);
+                        animationFrameId = null;
+                    }
+                };
+
+                resizer.addEventListener('mousedown', mouseDownHandler);
+            },
+
+            /** 初始化应用 */
+            init: function() {
+                // 1. 加载文档列表
+                this.loadDocuments();
+                
+                // 2. 绑定文件上传
+                const fileInput = document.getElementById('file-input');
+                fileInput.addEventListener('change', (e) => {
+                    const files = Array.from(e.target.files);
+                    files.forEach(file => this.uploadDocument(file));
+                    e.target.value = ''; // 清空选择
+                });
+
+                // 3. 绑定拖拽上传
+                const importZone = document.getElementById('import-zone');
+                importZone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    importZone.classList.add('drag-over');
+                });
+                
+                importZone.addEventListener('dragleave', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    importZone.classList.remove('drag-over');
+                });
+                
+                importZone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    importZone.classList.remove('drag-over');
+                    
+                    const files = Array.from(e.dataTransfer.files);
+                    const allowedExts = ['.pdf', '.docx', '.xlsx', '.xls', '.txt', '.md', '.json'];
+                    const validFiles = files.filter(file => {
+                        const ext = '.' + file.name.split('.').pop().toLowerCase();
+                        return allowedExts.includes(ext);
+                    });
+                    
+                    if (validFiles.length > 0) {
+                        validFiles.forEach(file => this.uploadDocument(file));
+                    } else if (files.length > 0) {
+                        alert('不支持的文件类型，请上传 PDF、Word、Excel、文本等格式');
+                    }
+                });
+
+                // 4. 绑定拖拽事件（调整大小）
+                this.makeResizable(document.getElementById('resizer-sidebar'), document.getElementById('sidebar'), true);
+                this.makeResizable(document.getElementById('resizer-horizontal'), document.getElementById('comparison-area'), false);
+
+                console.log("Knowledge OS V8.1 初始化完成.");
+            }
+        };
+
+        // 页面加载完成后，执行初始化
+        window.onload = function() {
+            KnowledgeOS.init();
+        };
+    </script>
+</body>
+</html>

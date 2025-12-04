@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NextGen Knowledge OS - V6.0</title>
+    <style>
+        /* 1. 定义未来感配色体系 */
+        :root {
+            /* 深空背景渐变 */
+            --bg-gradient: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+
+            /* 玻璃态面板背景 (带透明度) */
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+
+            /* 文本颜色 */
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0c0;
+            --text-muted: #6c6c80;
+
+            /* 霓虹强调色 */
+            --accent-primary: #00d2ff; /* 赛博蓝 - 确认/主操作 */
+            --accent-secondary: #3a7bd5; /* 深蓝 - 选中态 */
+            --accent-danger: #ff4b4b; /* 警告/删除 */
+            --accent-glow: 0 0 10px rgba(0, 210, 255, 0.4);
+
+            /* 字体 */
+            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        /* 2. 全局重置与基础样式 */
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: var(--font-family);
+            background: var(--bg-gradient); /* 启用深空背景 */
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            background-attachment: fixed;
+        }
+
+        /* 滚动条美化 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
+
+        /* 3. 布局容器 */
+        .app-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* --- 侧边栏 (Sidebar) --- */
+        .sidebar {
+            width: 260px;
+            min-width: 200px;
+            background: rgba(0, 0, 0, 0.2); /* 比主区域稍暗 */
+            backdrop-filter: blur(10px);
+            border-right: 1px solid var(--glass-border);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            z-index: 10;
+        }
+
+        .brand-area {
+            font-size: 1.2rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            background: linear-gradient(90deg, #fff, #a0a0c0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 30px;
+        }
+
+        .upload-btn {
+            background: var(--glass-bg);
+            border: 1px dashed var(--accent-secondary);
+            color: var(--text-secondary);
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 25px;
+        }
+        .upload-btn:hover {
+            background: rgba(58, 123, 213, 0.1);
+            border-color: var(--accent-primary);
+            color: var(--text-primary);
+            box-shadow: var(--accent-glow);
+        }
+
+        .file-list { flex-grow: 1; overflow-y: auto; }
+
+        /* 文件卡片样式 */
+        .file-item {
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+            background: transparent;
+        }
+        .file-item:hover {
+            background: rgba(255,255,255,0.03);
+        }
+        /* 选中状态：发光效果 */
+        .file-item.active {
+            background: linear-gradient(90deg, rgba(58, 123, 213, 0.2), transparent);
+            border-left-color: var(--accent-primary);
+            color: #fff;
+        }
+        .file-name { font-size: 0.9rem; font-weight: 500; display: block;}
+        .file-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; display: flex; justify-content: space-between;}
+
+        /* --- 拖拽分割线 (Resizer) --- */
+        .resizer {
+            background: transparent;
+            z-index: 20;
+            transition: background 0.2s;
+        }
+        .resizer:hover { background: var(--accent-primary); opacity: 0.5; }
+
+        .resizer-x { width: 4px; cursor: col-resize; height: 100%; border-left: 1px solid rgba(255,255,255,0.05); }
+        .resizer-y { height: 4px; cursor: row-resize; width: 100%; border-top: 1px solid rgba(255,255,255,0.05); }
+
+
+        /* --- 主工作区 (Workbench) --- */
+        .main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            background: transparent; /* 透出底部的深空背景 */
+            position: relative;
+        }
+
+        /* 顶部标题栏 (替代旧的流程条) */
+        .top-bar {
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+            border-bottom: 1px solid var(--glass-border);
+            background: rgba(0,0,0,0.1);
+        }
+        .doc-title-group { display: flex; align-items: center; gap: 15px; }
+        .doc-title { font-size: 1.1rem; font-weight: 600; }
+        /* 状态胶囊 */
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: rgba(255, 184, 108, 0.15);
+            color: #ffb86c;
+            border: 1px solid rgba(255, 184, 108, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .status-dot { width: 6px; height: 6px; background: #ffb86c; border-radius: 50%; box-shadow: 0 0 5px #ffb86c; }
+
+        /* --- 上半部分：双栏比对区 --- */
+        .comparison-area {
+            height: 50%; /* 默认高度，可拖拽 */
+            display: flex;
+            padding: 20px;
+            gap: 0; /* 使用 resizer 间隔 */
+            min-height: 200px;
+        }
+
+        .panel-box {
+            flex: 1;
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            box-shadow: var(--glass-shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: box-shadow 0.3s;
+        }
+        .panel-box:hover { box-shadow: 0 8px 32px 0 rgba(0, 210, 255, 0.1); }
+
+        .panel-header {
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--glass-border);
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            background: rgba(0,0,0,0.2);
+            display: flex;
+            justify-content: space-between;
+        }
+        .panel-body {
+            padding: 20px;
+            overflow-y: auto;
+            color: #d1d1e0;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+        /* 关键词高亮 */
+        .highlight {
+            background: linear-gradient(90deg, rgba(0, 210, 255, 0.1), transparent);
+            border-bottom: 1px solid var(--accent-primary);
+            color: #fff;
+            padding: 0 4px;
+        }
+
+        /* --- 下半部分：知识切片列表 --- */
+        .chunks-area {
+            flex-grow: 1;
+            padding: 0 20px 20px 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .chunks-header {
+            padding: 15px 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            background: transparent; /* 为了视觉通透，这里不加背景，文字直接浮在深空上 */
+            z-index: 5;
+        }
+        .btn-add {
+            background: var(--accent-primary);
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.85rem;
+            box-shadow: var(--accent-glow);
+            transition: transform 0.2s;
+        }
+        .btn-add:hover { transform: translateY(-2px); background: #33dcff; }
+
+        /* 立体知识卡片 */
+        .chunk-card {
+            background: rgba(30, 30, 46, 0.6); /* 稍微深一点的背景 */
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .chunk-card:hover {
+            background: rgba(40, 40, 60, 0.8);
+            border-color: rgba(0, 210, 255, 0.3);
+            transform: translateY(-3px) scale(1.005); /* 3D悬浮感 */
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+        }
+
+        .chunk-content {
+            margin-bottom: 40px; /* 留出底部按钮空间 */
+            font-size: 0.95rem;
+            color: var(--text-primary);
+        }
+
+        .tags-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .tag {
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.05);
+            color: var(--text-secondary);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        /* 底部操作栏 (右下角) */
+        .chunk-actions {
+            position: absolute;
+            bottom: 15px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        .chunk-card:hover .chunk-actions { opacity: 1; }
+
+        .btn-icon {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn-icon:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+        .btn-confirm {
+            background: rgba(0, 210, 255, 0.1);
+            color: var(--accent-primary);
+            border: 1px solid rgba(0, 210, 255, 0.3);
+        }
+        .btn-confirm:hover {
+            background: var(--accent-primary);
+            color: #000;
+            box-shadow: var(--accent-glow);
+        }
+        .btn-delete:hover { color: var(--accent-danger); background: rgba(255, 75, 75, 0.1); }
+
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <div class="sidebar" id="sidebar">
+            <div class="brand-area">KNOWLEDGE.OS</div>
+            <div class="upload-btn">+ 导入新文档</div>
+
+            <div class="file-list">
+                <div class="file-item active" onclick="selectFile(this)">
+                    <span class="file-name">📄 催收作业规范 V2.pdf</span>
+                    <div class="file-meta">
+                        <span>待审核</span>
+                        <span>15 切片</span>
+                    </div>
+                </div>
+                <div class="file-item" onclick="selectFile(this)">
+                    <span class="file-name">📊 减免流程标准_Q3.xlsx</span>
+                    <div class="file-meta">
+                        <span style="color:var(--accent-primary)">✔ 已入库</span>
+                        <span>8 切片</span>
+                    </div>
+                </div>
+                <div class="file-item" onclick="selectFile(this)">
+                    <span class="file-name">📄 客服话术总纲.docx</span>
+                    <div class="file-meta">
+                        <span>处理中...</span>
+                        <span>--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="resizer resizer-x" id="resizer-sidebar"></div>
+
+        <div class="main-content">
+
+            <div class="top-bar">
+                <div class="doc-title-group">
+                    <span class="doc-title">催收作业规范 V2.pdf</span>
+                    <div class="status-badge">
+                        <div class="status-dot"></div>
+                        知识切分审核中
+                    </div>
+                </div>
+                <div style="font-size:0.8rem; color:var(--text-secondary)">最后更新: 10分钟前</div>
+            </div>
+
+            <div class="comparison-area" id="comparison-area">
+                <div class="panel-box">
+                    <div class="panel-header">
+                        <span>ORIGINAL PDF VIEW</span>
+                        <span>P. 3/12</span>
+                    </div>
+                    <div class="panel-body">
+                        <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; border: 1px dashed rgba(255,255,255,0.1); border-radius:8px; color:var(--text-muted);">
+                            [ PDF Preview Container ]<br>
+                            Original formatting, charts & watermarks
+                        </div>
+                    </div>
+                </div>
+
+                <div class="resizer resizer-x" id="resizer-panel"></div>
+
+                <div class="panel-box">
+                    <div class="panel-header">
+                        <span>PARSED TEXT STREAM</span>
+                        <span style="color:var(--accent-primary)">AI CLEANED</span>
+                    </div>
+                    <div class="panel-body">
+                        <p style="opacity:0.6; margin-bottom:20px;">[System Note] Headers and footers removed.</p>
+                        <h3>3.1 违规分级定义</h3>
+                        <p>为规范作业行为，现定义违规等级如下：</p>
+                        <p><span class="highlight">A级高风险违规</span>：指在与客户沟通中，出现<span class="highlight">恐吓、威胁人身安全</span>或使用侮辱性词汇的行为。</p>
+                        <p>一旦触发A级违规，系统将自动阻断通话并生成工单。</p>
+                        <p>...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="resizer resizer-y" id="resizer-horizontal"></div>
+
+            <div class="chunks-area" id="chunks-area">
+                <div class="chunks-header">
+                    <span style="font-weight:600; color:var(--text-secondary)">KNOWLEDGE CHUNKS (15)</span>
+                    <button class="btn-add">✨ 新增切片</button>
+                </div>
+
+                <div class="chunk-card">
+                    <div class="chunk-content">
+                        <strong>[Chunk #001]</strong> 催收作业人员不得对客户使用带有威胁、侮辱性或恐吓的言语。任何违反此规范的行为将被定性为 A 级高风险违规，需立即上报并处理。
+                    </div>
+                    <div class="tags-row">
+                        <span class="tag"># 催收规范</span>
+                        <span class="tag"># A级违规</span>
+                        <span class="tag">Source: Page 3</span>
+                    </div>
+                    <div class="chunk-actions">
+                        <button class="btn-icon btn-delete">🗑 删除</button>
+                        <button class="btn-icon">✏️ 修改</button>
+                        <button class="btn-icon btn-confirm">✔ 确认入库</button>
+                    </div>
+                </div>
+
+                <div class="chunk-card">
+                    <div class="chunk-content">
+                        <strong>[Chunk #002]</strong> 减免流程需经客户经理、风控部门和总监三级审批。客户需提交近三个月的收入证明和财产证明作为附件。
+                    </div>
+                    <div class="tags-row">
+                        <span class="tag"># 减免流程</span>
+                        <span class="tag"># 审批流</span>
+                    </div>
+                    <div class="chunk-actions">
+                        <button class="btn-icon btn-delete">🗑 删除</button>
+                        <button class="btn-icon">✏️ 修改</button>
+                        <button class="btn-icon btn-confirm">✔ 确认入库</button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 简单的拖拽逻辑 Demo
+        const makeResizable = function(resizer, prevSibling, isVertical) {
+            let x = 0;
+            let y = 0;
+            let prevSize = 0;
+
+            const mouseDownHandler = function(e) {
+                x = e.clientX;
+                y = e.clientY;
+                const rect = prevSibling.getBoundingClientRect();
+                prevSize = isVertical ? rect.width : rect.height;
+
+                document.addEventListener('mousemove', mouseMoveHandler);
+                document.addEventListener('mouseup', mouseUpHandler);
+            };
+
+            const mouseMoveHandler = function(e) {
+                const dx = e.clientX - x;
+                const dy = e.clientY - y;
+                if (isVertical) {
+                    prevSibling.style.width = `${prevSize + dx}px`;
+                } else {
+                    prevSibling.style.height = `${prevSize + dy}px`;
+                }
+            };
+
+            const mouseUpHandler = function() {
+                document.removeEventListener('mousemove', mouseMoveHandler);
+                document.removeEventListener('mouseup', mouseUpHandler);
+            };
+
+            resizer.addEventListener('mousedown', mouseDownHandler);
+        };
+
+        // 绑定 Resizer
+        makeResizable(document.getElementById('resizer-sidebar'), document.getElementById('sidebar'), true);
+        makeResizable(document.getElementById('resizer-panel'), document.querySelector('.panel-box'), true);
+        makeResizable(document.getElementById('resizer-horizontal'), document.getElementById('comparison-area'), false);
+
+        // 点击切换 active 样式
+        function selectFile(el) {
+            document.querySelectorAll('.file-item').forEach(d => d.classList.remove('active'));
+            el.classList.add('active');
+            // 这里可以添加逻辑：更新右侧标题和内容
+        }
+    </script>
+</body>
+</html>

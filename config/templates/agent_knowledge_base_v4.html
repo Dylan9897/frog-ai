@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge OS - 知识库智能工作台 V8.0</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- 1. 核心配色体系 (参考 Sandbox OS 风格) --- */
+        :root {
+            /* 背景色系：深邃星空 */
+            --bg-universe: #0b0c15;
+            --bg-sidebar: #12131f;
+            --bg-card: #1c1d2e;
+            --bg-card-hover: #232438;
+
+            /* 边框与分割线 */
+            --border-color: rgba(112, 112, 155, 0.15);
+            --border-highlight: rgba(111, 89, 251, 0.5);
+
+            /* 品牌色 */
+            --brand-primary: #7059fb; /* 核心紫 */
+            --brand-primary-hover: #8571ff;
+            --brand-cyan: #00f0ff; /* 科技青 (AI高亮) */
+            --brand-success: #00d2b6; /* 成功绿 */
+            --brand-warning: #ffb86c; /* 警告橙 */
+            --brand-danger: #ff4d4f; /* 危险红 */
+
+            /* 文本颜色 */
+            --text-main: #ffffff;
+            --text-secondary: #8f9bb3;
+            --text-muted: #586075;
+
+            /* 圆角与阴影 */
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.4);
+            --shadow-glow: 0 0 15px rgba(112, 89, 251, 0.3);
+        }
+
+        /* --- 2. 全局基础样式 --- */
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-universe);
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden;
+            /* 模拟微弱的星空背景图 */
+            background-image: radial-gradient(circle at 15% 50%, rgba(112, 89, 251, 0.08), transparent 25%),
+                              radial-gradient(circle at 85% 30%, rgba(0, 240, 255, 0.05), transparent 25%);
+        }
+
+        /* 滚动条美化 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+
+        /* --- 3. 布局框架 --- */
+        .app-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* --- 左侧侧边栏 --- */
+        .sidebar {
+            width: 260px;
+            background-color: var(--bg-sidebar);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 24px 16px;
+            z-index: 100;
+        }
+
+        .logo-area {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 30px;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .logo-dot { width: 8px; height: 8px; background: var(--brand-primary); border-radius: 50%; box-shadow: 0 0 8px var(--brand-primary); }
+
+        .btn-import {
+            width: 100%;
+            padding: 12px;
+            border: 1px dashed var(--brand-primary);
+            background: rgba(112, 89, 251, 0.05);
+            color: var(--brand-primary-hover);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: 0.3s;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .btn-import:hover {
+            background: rgba(112, 89, 251, 0.15);
+            box-shadow: 0 0 12px rgba(112, 89, 251, 0.2);
+        }
+
+        .file-list-header {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+
+        .file-item {
+            padding: 12px 14px;
+            border-radius: var(--radius-md);
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: transparent;
+            border-left: 3px solid transparent;
+        }
+        .file-item:hover { background: rgba(255,255,255,0.03); }
+        .file-item.active {
+            background: rgba(112, 89, 251, 0.1);
+            border-left-color: var(--brand-primary);
+        }
+        .file-name { font-size: 14px; margin-bottom: 4px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .file-meta { font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between; }
+        .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; }
+
+        /* --- 主工作区 --- */
+        .main-workspace {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* 顶部导航 */
+        .top-header {
+            height: 60px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            background: rgba(18, 19, 31, 0.8);
+            backdrop-filter: blur(10px);
+        }
+        .doc-title { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 12px; }
+        .status-badge {
+            font-size: 12px;
+            padding: 4px 10px;
+            background: rgba(255, 184, 108, 0.1);
+            color: var(--brand-warning);
+            border: 1px solid rgba(255, 184, 108, 0.3);
+            border-radius: 20px;
+        }
+        .last-update { font-size: 12px; color: var(--text-muted); }
+
+        /* 分割线 Resizer */
+        .resizer { background: transparent; z-index: 50; transition: 0.2s; }
+        .resizer-x { width: 5px; cursor: col-resize; border-left: 1px solid transparent; }
+        .resizer-y { height: 5px; cursor: row-resize; border-top: 1px solid transparent; }
+        .resizer:hover { border-color: var(--brand-primary); }
+
+        /* --- 比对视图区域 --- */
+        .comparison-container {
+            height: 55%;
+            display: flex;
+            background-color: var(--bg-universe);
+        }
+
+        .panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-universe);
+            border-right: 1px solid var(--border-color); /* 右边框分隔 */
+        }
+        .panel:last-child { border-right: none; }
+
+        .panel-header {
+            height: 40px;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(28, 29, 46, 0.5);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+        .header-action { color: var(--brand-primary); cursor: pointer; }
+
+        /* 原文档内容容器 - 核心功能点(3) */
+        .panel-body {
+            flex: 1;
+            position: relative;
+            /* 关键：默认 hidden，无滚动条 */
+            overflow: hidden;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        /* 当内容超出时，JS或CSS类会控制它变为 auto */
+        .panel-body.scrollable {
+            overflow: auto;
+            align-items: flex-start; /* 滚动时内容从顶部开始 */
+            justify-content: flex-start;
+        }
+
+        /* 模拟 PDF 图片 */
+        .pdf-image-mock {
+            /* 默认适应容器，不产生滚动条 */
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            transition: all 0.3s;
+        }
+        /* 放大模式（模拟产生滚动条） */
+        .pdf-image-mock.zoomed {
+            max-width: none;
+            max-height: none;
+            width: 150%; /* 强制超出宽度 */
+        }
+
+        /* 解析文本区域 */
+        .text-stream-content {
+            padding: 30px;
+            overflow-y: auto;
+            color: #d1d5db;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+        .text-stream-content h3 { color: var(--text-main); margin-top: 0; font-size: 18px; }
+        .highlight-text {
+            color: var(--brand-cyan);
+            border-bottom: 1px dashed var(--brand-cyan);
+            padding-bottom: 1px;
+        }
+
+        /* --- 底部知识切片区域 --- */
+        .chunks-container {
+            flex-grow: 1;
+            background-color: rgba(18, 19, 31, 0.6);
+            display: flex;
+            flex-direction: column;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .chunks-header {
+            padding: 15px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .section-title { font-size: 14px; font-weight: 700; color: var(--text-secondary); }
+
+        .btn-create {
+            background: var(--brand-primary);
+            color: #fff;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(112, 89, 251, 0.3);
+            transition: 0.2s;
+        }
+        .btn-create:hover { background: var(--brand-primary-hover); }
+
+        .chunks-list {
+            flex: 1;
+            padding: 0 24px 30px 24px;
+            overflow-y: auto;
+        }
+
+        /* 知识卡片样式 */
+        .chunk-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            margin-bottom: 16px;
+            position: relative;
+            transition: all 0.3s;
+        }
+        .chunk-card:hover {
+            border-color: var(--brand-primary);
+            box-shadow: var(--shadow-card);
+            background-color: var(--bg-card-hover);
+        }
+
+        .chunk-id {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            display: block;
+        }
+        .chunk-content {
+            font-size: 14px;
+            color: var(--text-main);
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .chunk-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .tags-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .tag {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* 来源按钮 (核心功能点) */
+        .source-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            background: rgba(112, 89, 251, 0.1);
+            border: 1px solid rgba(112, 89, 251, 0.3);
+            color: var(--brand-primary-hover);
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: 0.2s;
+        }
+        .source-btn:hover {
+            background: var(--brand-primary);
+            color: #fff;
+        }
+
+        .actions-group {
+            display: flex;
+            gap: 12px;
+        }
+        .action-link {
+            font-size: 12px;
+            cursor: pointer;
+            color: var(--text-muted);
+            transition: 0.2s;
+            background: transparent;
+            border: none;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .action-link:hover { color: var(--text-main); }
+        .action-link.delete:hover { color: var(--brand-danger); }
+
+        .btn-confirm {
+            background: rgba(0, 210, 182, 0.1);
+            color: var(--brand-success);
+            border: 1px solid rgba(0, 210, 182, 0.3);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-confirm:hover {
+            background: var(--brand-success);
+            color: #000;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+
+        <aside class="sidebar" id="sidebar">
+            <div class="logo-area">
+                <div class="logo-dot"></div>
+                Sandbox OS
+            </div>
+
+            <div class="btn-import">+ 导入新文档</div>
+
+            <div class="file-list-header">知识源列表 (128)</div>
+
+            <div class="file-item active">
+                <span class="file-name">📄 催收作业规范 V2.pdf</span>
+                <div class="file-meta">
+                    <span style="color: var(--brand-warning);"><span class="status-dot" style="background:var(--brand-warning)"></span>待审核</span>
+                    <span>15 切片</span>
+                </div>
+            </div>
+
+            <div class="file-item">
+                <span class="file-name">📊 减免流程标准_Q3.xlsx</span>
+                <div class="file-meta">
+                    <span style="color: var(--brand-success);"><span class="status-dot" style="background:var(--brand-success)"></span>已入库</span>
+                    <span>8 切片</span>
+                </div>
+            </div>
+
+            <div class="file-item">
+                <span class="file-name">📄 客服话术总纲.docx</span>
+                <div class="file-meta">
+                    <span style="color: var(--text-muted);"><span class="status-dot" style="background:var(--text-muted)"></span>处理中</span>
+                    <span>--</span>
+                </div>
+            </div>
+        </aside>
+
+        <div class="resizer resizer-x" id="resizer-sidebar"></div>
+
+        <main class="main-workspace">
+            <header class="top-header">
+                <div class="doc-title">
+                    催收作业规范 V2.pdf
+                    <span class="status-badge">知识切分审核中</span>
+                </div>
+                <div class="last-update">最后更新: 10分钟前</div>
+            </header>
+
+            <section class="comparison-container" id="comparison-area">
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <span>原文档视图 (PDF)</span>
+                        <div class="header-action" onclick="toggleZoom()">🔍 缩放视图 (测试滚动条)</div>
+                    </div>
+                    <div class="panel-body" id="pdf-wrapper">
+                        <div class="pdf-image-mock" id="pdf-content" style="width: 80%; height: 80%; background: #26273b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #586075; border: 1px dashed rgba(255,255,255,0.1);">
+                            [ PDF 预览区域 ]<br>第 3 页
+                        </div>
+                    </div>
+                </div>
+
+                <div class="resizer resizer-x" id="resizer-panel"></div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <span>解析文本流 (AI 清洗)</span>
+                        <span style="color: var(--brand-cyan)">● 已完成清洗</span>
+                    </div>
+                    <div class="text-stream-content">
+                        <h3>3.1 违规分级定义</h3>
+                        <p style="opacity: 0.6; font-size: 12px; margin-bottom: 20px;">[系统提示] 页眉页脚已自动移除。</p>
+                        <p>为规范作业行为，现定义违规等级如下：</p>
+                        <p><span class="highlight-text">A级高风险违规</span>：指在与客户沟通中，出现<span class="highlight-text">恐吓、威胁人身安全</span>或使用侮辱性词汇的行为。</p>
+                        <p>一旦触发A级违规，系统将自动阻断通话并生成工单。</p>
+                        <p>（此处省略后续 500 字...）</p>
+                    </div>
+                </div>
+            </section>
+
+            <div class="resizer resizer-y" id="resizer-horizontal"></div>
+
+            <section class="chunks-container">
+                <div class="chunks-header">
+                    <span class="section-title">知识切片列表 (共 15 条)</span>
+                    <button class="btn-create">✨ 创建新切片</button>
+                </div>
+
+                <div class="chunks-list">
+
+                    <div class="chunk-card">
+                        <span class="chunk-id">ID: CHUNK-001</span>
+                        <div class="chunk-content">
+                            催收作业人员不得对客户使用带有威胁、侮辱性或恐吓的言语。任何违反此规范的行为将被定性为 A 级高风险违规，需立即上报并处理。
+                        </div>
+                        <div class="chunk-footer">
+                            <div class="tags-group">
+                                <span class="tag"># 催收规范</span>
+                                <span class="tag"># A级违规</span>
+                                <div class="source-btn">📄 来源: 第 3 页</div>
+                            </div>
+                            <div class="actions-group">
+                                <button class="action-link delete">🗑 删除</button>
+                                <button class="action-link">✏️ 修改</button>
+                                <button class="btn-confirm">✔ 确认入库</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chunk-card">
+                        <span class="chunk-id">ID: CHUNK-002</span>
+                        <div class="chunk-content">
+                            减免流程需经客户经理、风控部门和总监三级审批。客户需提交近三个月的收入证明和财产证明作为附件。
+                        </div>
+                        <div class="chunk-footer">
+                            <div class="tags-group">
+                                <span class="tag"># 减免流程</span>
+                                <span class="tag"># 审批流</span>
+                                <div class="source-btn">📄 来源: 第 4 页</div>
+                            </div>
+                            <div class="actions-group">
+                                <button class="action-link delete">🗑 删除</button>
+                                <button class="action-link">✏️ 修改</button>
+                                <button class="btn-confirm">✔ 确认入库</button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        // 1. 模拟“仅当图片超过背景框大小的时候才显示滚动条”的逻辑
+        function toggleZoom() {
+            const wrapper = document.getElementById('pdf-wrapper');
+            const content = document.getElementById('pdf-content');
+
+            // 切换放大类
+            content.classList.toggle('zoomed');
+
+            // 检查是否应该显示滚动条
+            // 在实际项目中，可以使用 ResizeObserver 自动监听
+            if (content.classList.contains('zoomed')) {
+                wrapper.classList.add('scrollable'); // 允许滚动
+            } else {
+                wrapper.classList.remove('scrollable'); // 隐藏滚动
+                wrapper.scrollTop = 0; // 重置位置
+                wrapper.scrollLeft = 0;
+            }
+        }
+
+        // 2. 简单的拖拽调整大小逻辑 (Resizer)
+        const makeResizable = function(resizer, prevSibling, isVertical) {
+            let x = 0; let y = 0; let prevSize = 0;
+            const mouseDownHandler = function(e) {
+                x = e.clientX; y = e.clientY;
+                const rect = prevSibling.getBoundingClientRect();
+                prevSize = isVertical ? rect.width : rect.height;
+                document.addEventListener('mousemove', mouseMoveHandler);
+                document.addEventListener('mouseup', mouseUpHandler);
+                resizer.style.borderColor = 'var(--brand-primary)';
+            };
+            const mouseMoveHandler = function(e) {
+                const dx = e.clientX - x;
+                const dy = e.clientY - y;
+                if (isVertical) prevSibling.style.width = `${prevSize + dx}px`;
+                else prevSibling.style.height = `${prevSize + dy}px`;
+            };
+            const mouseUpHandler = function() {
+                document.removeEventListener('mousemove', mouseMoveHandler);
+                document.removeEventListener('mouseup', mouseUpHandler);
+                resizer.style.borderColor = 'transparent';
+            };
+            resizer.addEventListener('mousedown', mouseDownHandler);
+        };
+
+        makeResizable(document.getElementById('resizer-sidebar'), document.getElementById('sidebar'), true);
+        makeResizable(document.getElementById('resizer-horizontal'), document.getElementById('comparison-area'), false);
+    </script>
+</body>
+</html>

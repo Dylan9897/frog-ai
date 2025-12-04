@@ -5,17 +5,33 @@ import mimetypes
 import json
 import sys
 import secrets
-from agent.file_parser import parse_file, SUPPORTED_EXTS
-from agent.chat import get_chat_service
-from agent.intent_tools import smart_open_file_from_text
-from agent.database import create_user, authenticate_user, get_user_by_id, init_database
+from pathlib import Path
+
+# 添加项目根目录到路径
+PROJECT_ROOT = Path(__file__).parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+# 导入统一配置
+from config.app_config import (
+    UPLOAD_FOLDER, CACHE_FOLDER, SHORTCUT_DIR, SHORTCUT_CONFIG_PATH,
+    TEMPLATES_DIR, ALLOWED_EXTENSIONS, FLASK_CONFIG
+)
+
+# 导入业务模块
+from src.agent.file_parser import parse_file, SUPPORTED_EXTS
+from src.agent.chat import get_chat_service
+from src.agent.intent_tools import smart_open_file_from_text
+from src.databases.user_db import create_user, authenticate_user, get_user_by_id, init_database
+from src.rag_agent.api import rag_bp
 
 # 初始化 Flask 应用
-app = Flask(__name__)
+app = Flask(__name__, template_folder=str(TEMPLATES_DIR))
 # 配置 Session（用于登录状态管理）
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_HTTPONLY'] = FLASK_CONFIG['SESSION_COOKIE_HTTPONLY']
+app.config['SESSION_COOKIE_SAMESITE'] = FLASK_CONFIG['SESSION_COOKIE_SAMESITE']
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = FLASK_CONFIG['MAX_CONTENT_LENGTH']
 
 # 允许跨域请求 - 配置更详细的 CORS 选项
 CORS(app, resources={
@@ -27,21 +43,8 @@ CORS(app, resources={
     }
 })
 
-# 配置上传文件夹（沙盒文件）
-UPLOAD_FOLDER = 'uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-# 配置问答缓存文件夹（仅用于对话附件，不在沙盒中展示）
-CACHE_FOLDER = 'cache'
-os.makedirs(CACHE_FOLDER, exist_ok=True)
-
-# 配置沙盒文件“快捷方式”目录和 JSON 配置
-SHORTCUT_DIR = 'sandbox_shortcuts'
-if not os.path.exists(SHORTCUT_DIR):
-    os.makedirs(SHORTCUT_DIR)
-
-SHORTCUT_CONFIG_PATH = os.path.join(SHORTCUT_DIR, 'shortcuts.json')
+# 注册 RAG Agent 蓝图
+app.register_blueprint(rag_bp)
 
 
 def _load_shortcuts() -> dict:
@@ -91,29 +94,6 @@ def remove_shortcut(filename: str):
 
 
 # --- 实用函数 ---
-# 允许上传的常见文件扩展名（白名单策略，可按需扩展）
-ALLOWED_EXTENSIONS = {
-    # 文本 / 配置类
-    'txt', 'log', 'md', 'markdown', 'rst',
-    'json', 'yaml', 'yml', 'ini', 'cfg',
-    'csv', 'tsv', 'xml',
-    # 代码 / 脚本类
-    'py', 'js', 'jsx', 'ts', 'tsx',
-    'html', 'htm', 'css',
-    # 文档 / 表格 / 演示
-    'pdf',
-    'doc', 'docx',
-    'xls', 'xlsx',
-    'ppt', 'pptx',
-    # 图片
-    'png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'ico',
-    # 压缩包
-    'zip', 'rar', '7z', 'tar', 'gz',
-    # 音频 / 视频（仅作为附件管理，不做文本预览）
-    'mp3', 'wav', 'ogg', 'flac',
-    'mp4', 'mov', 'avi', 'mkv', 'webm',
-}
-
 
 def allowed_file(filename: str) -> bool:
     """只允许特定的文件扩展名，防止恶意上传"""
@@ -541,7 +521,7 @@ def chat_endpoint():
                     messages.append({'role': Role.SYSTEM, 'content': smart_action_summary})
                 
                 # 限制历史对话轮数
-                from agent.chat import MAX_HISTORY_ROUNDS
+                from src.agent.chat import MAX_HISTORY_ROUNDS
                 current_rounds = (len(messages) - 1) // 2
                 if current_rounds > MAX_HISTORY_ROUNDS:
                     excess_rounds = current_rounds - MAX_HISTORY_ROUNDS
@@ -733,7 +713,7 @@ if __name__ == '__main__':
         print("⚠️  警告: ASR 服务未运行 (端口 5001)")
         print("   语音识别功能将不可用。")
         print("   请运行以下命令启动 ASR 服务：")
-        print("   python -m uvicorn agent.asr_server:app --host 0.0.0.0 --port 5001")
+        print("   python -m uvicorn src.agent.asr_server:app --host 0.0.0.0 --port 5001")
         print("   或者使用 start_all.py 同时启动所有服务：")
         print("   python start_all.py")
         print("----------------------------------------------------------")

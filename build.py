@@ -104,7 +104,7 @@ def start_flask_server():
         from flask import send_from_directory
         # 修复模板路径
         if hasattr(sys, '_MEIPASS'):
-            template_dir = os.path.join(sys._MEIPASS, 'templates')
+            template_dir = os.path.join(sys._MEIPASS, 'config', 'templates')
             server.app.template_folder = template_dir
             # 替换 index 函数的实现（不重新定义路由，避免冲突）
             def patched_index():
@@ -128,7 +128,7 @@ def start_asr_server():
         
         import uvicorn
         import asyncio
-        from agent.asr_server import app
+        from src.agent.asr_server import app
         
         base_path = get_base_path()
         os.chdir(base_path)
@@ -172,7 +172,7 @@ def start_desktop_frog():
         # 修复图标路径
         if hasattr(sys, '_MEIPASS'):
             def get_icon_path():
-                icon_path = get_resource_path("templates/frog.png")
+                icon_path = get_resource_path("config/templates/frog.png")
                 fallback_path = get_resource_path("big_eye_robot.png")
                 if not os.path.exists(icon_path):
                     icon_path = fallback_path
@@ -355,9 +355,9 @@ def build_exe():
     
     # 添加数据文件
     cmd.append("--add-data")
-    cmd.append(f"templates{os.pathsep}templates")           # HTML 模板
+    cmd.append(f"config/templates{os.pathsep}config/templates")           # HTML 模板
     cmd.append("--add-data")
-    cmd.append(f"templates/frog.png{os.pathsep}templates")  # 桌面助手图标
+    cmd.append(f"config/templates/frog.png{os.pathsep}config/templates")  # 桌面助手图标
     
     # 添加隐藏导入（PyInstaller 可能无法自动检测到的模块）
     cmd.extend([
@@ -382,13 +382,16 @@ def build_exe():
         "--hidden-import=PyQt5.QtWidgets",
         "--hidden-import=docx",
         "--hidden-import=openpyxl",
-        "--hidden-import=agent",
-        "--hidden-import=agent.chat",
-        "--hidden-import=agent.file_parser",
-        "--hidden-import=agent.asr_server",
-        "--hidden-import=agent.asr_service",
-        "--hidden-import=agent.config",
-        "--hidden-import=agent.intent_tools",
+        "--hidden-import=src.agent",
+        "--hidden-import=src.agent.chat",
+        "--hidden-import=src.agent.file_parser",
+        "--hidden-import=src.agent.asr_server",
+        "--hidden-import=src.agent.asr_service",
+        "--hidden-import=src.agent.config",
+        "--hidden-import=src.agent.intent_tools",
+        "--hidden-import=src.databases",
+        "--hidden-import=src.databases.user_db",
+        "--hidden-import=config.app_config",
     ])
     
     # 收集所有子模块
@@ -431,15 +434,16 @@ def create_runtime_dirs():
         exe_dir = DIST_DIR  # 如果 onefile 模式，exe 直接在 dist 目录
     
     # 创建必要的目录（这些目录会在运行时由程序自动创建，但提前创建也没问题）
+    data_dir = os.path.join(exe_dir, 'data')
     dirs_to_create = ['uploads', 'cache', 'sandbox_shortcuts']
     for dir_name in dirs_to_create:
-        dir_path = os.path.join(exe_dir, dir_name)
+        dir_path = os.path.join(data_dir, dir_name)
         os.makedirs(dir_path, exist_ok=True)
-        print(f"   ✅ {dir_name}/")
+        print(f"   ✅ data/{dir_name}/")
     
     # 复制 shortcuts.json 如果存在
-    shortcuts_src = os.path.join(PROJECT_ROOT, 'sandbox_shortcuts', 'shortcuts.json')
-    shortcuts_dst = os.path.join(exe_dir, 'sandbox_shortcuts', 'shortcuts.json')
+    shortcuts_src = os.path.join(PROJECT_ROOT, 'data', 'sandbox_shortcuts', 'shortcuts.json')
+    shortcuts_dst = os.path.join(data_dir, 'sandbox_shortcuts', 'shortcuts.json')
     if os.path.exists(shortcuts_src):
         os.makedirs(os.path.dirname(shortcuts_dst), exist_ok=True)
         shutil.copy2(shortcuts_src, shortcuts_dst)
@@ -464,11 +468,11 @@ def create_readme():
 
 ## 配置要求
 
-1. 确保已配置 DashScope API Key（在 agent/config.py 中）
+1. 确保已配置 DashScope API Key（在 src/agent/config.py 中）
 2. 首次运行会自动创建以下目录：
-   - uploads/ - 沙盒文件存储
-   - cache/ - 对话附件存储
-   - sandbox_shortcuts/ - 快捷方式配置
+   - data/uploads/ - 沙盒文件存储
+   - data/cache/ - 对话附件存储
+   - data/sandbox_shortcuts/ - 快捷方式配置
 
 ## 注意事项
 

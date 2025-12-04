@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sandbox OS Pro · AI Workspace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght=400&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        slate: { 850: '#151e2e', 950: '#020617' }
+                    },
+                    screens: {
+                        '2xl': '1536px',
+                        '3xl': '1920px',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* --- 全局与背景 --- */
+        body {
+            background-color: #0f111a;
+            background-image:
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(5, 150, 105, 0.1) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: #e2e8f0;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* --- 应用窗口样式 - 响应式 --- */
+        #app-container {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8),
+                        0 0 0 1px rgba(255, 255, 255, 0.08);
+            border-radius: 1.5rem;
+            overflow: hidden;
+            background-color: #0f111a;
+            width: calc(100% - 1rem);
+            height: calc(100% - 1rem);
+            top: 0.5rem;
+            left: 0.5rem;
+            margin: auto;
+        }
+
+        /* 平板和桌面端 */
+        @media (min-width: 640px) {
+            #app-container {
+                width: calc(100% - 3rem);
+                height: calc(100% - 3rem);
+                top: 1.5rem;
+                left: 1.5rem;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            #app-container {
+                width: calc(100% - 6rem);
+                height: calc(100% - 6rem);
+                top: 3rem;
+                left: 3rem;
+            }
+        }
+
+        /* 大屏幕：使用更大的边距，但窗口可以继续扩大 */
+        @media (min-width: 1536px) {
+            #app-container {
+                width: calc(100% - 8rem);
+                height: calc(100% - 8rem);
+                top: 4rem;
+                left: 4rem;
+            }
+        }
+
+        /* 超大屏幕：使用更大的边距，窗口可以继续扩大 */
+        @media (min-width: 1920px) {
+            #app-container {
+                width: calc(100% - 10rem);
+                height: calc(100% - 10rem);
+                top: 5rem;
+                left: 5rem;
+            }
+        }
+
+        @media (min-width: 2560px) {
+            #app-container {
+                width: calc(100% - 12rem);
+                height: calc(100% - 12rem);
+                top: 6rem;
+                left: 6rem;
+            }
+        }
+
+        /* 超宽屏：保持合理边距，窗口充分利用空间 */
+        @media (min-width: 3840px) {
+            #app-container {
+                width: calc(100% - 16rem);
+                height: calc(100% - 16rem);
+                top: 8rem;
+                left: 8rem;
+            }
+        }
+
+        /* --- 侧边栏动效与布局自适应 (关键) - 响应式 --- */
+        #ai-sidebar {
+            width: 100%;
+            transform: translateX(0);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            flex-shrink: 0;
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 50;
+        }
+
+        @media (min-width: 640px) {
+            #ai-sidebar {
+                width: 380px;
+                position: relative;
+                z-index: auto;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            #ai-sidebar {
+                width: 420px;
+            }
+        }
+
+        #ai-sidebar.collapsed {
+            transform: translateX(100%);
+            width: 0;
+            padding: 0;
+            margin: 0;
+            opacity: 0;
+            overflow: hidden;
+        }
+        #sidebar-content.hidden {
+            display: none !important;
+        }
+        #main-stage {
+            flex-grow: 1;
+            transition: width 0.4s, flex-grow 0.4s;
+            max-width: 100%;
+            min-width: 0;
+        }
+
+        /* --- 悬浮机器人样式 - 响应式 --- */
+        #floating-robot {
+            filter: drop-shadow(0 0 15px rgba(99, 102, 241, 0.7));
+            transition: all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+            width: 3.5rem;
+            height: 3.5rem;
+        }
+
+        @media (min-width: 640px) {
+            #floating-robot {
+                width: 5rem;
+                height: 5rem;
+            }
+        }
+
+        #floating-robot:hover {
+            transform: scale(1.1) rotate(5deg);
+        }
+
+        /* --- 文件卡片样式 --- */
+        .glass-card {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 沙盒拖拽高亮效果 */
+        #sandbox-grid-wrapper.drag-over {
+            border: 2px dashed #6366f1;
+            background-color: rgba(99, 102, 241, 0.05);
+            border-radius: 1.5rem;
+            transition: all 0.2s;
+        }
+        /* 对话框拖拽高亮 */
+        #chat-input-wrapper.drag-over-chat {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3);
+        }
+
+        /* 其他样式保持一致 */
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(12px);
+        }
+
+        /* --- 响应式优化 --- */
+        @media (max-width: 639px) {
+            /* 移动端：隐藏上传按钮文字 */
+            .upload-btn-text {
+                display: none;
+            }
+            
+            /* 移动端：调整头部布局 */
+            header {
+                flex-direction: column;
+                align-items: flex-start !important;
+                gap: 1rem;
+            }
+
+            /* 移动端：调整按钮组 */
+            header > div:last-child {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            /* 移动端：文件卡片高度 */
+            .sandbox-file-card {
+                height: auto;
+                min-height: 8rem;
+            }
+
+            /* 移动端：模态框全屏 */
+            #modal-content-area {
+                max-width: 100% !important;
+                height: 100% !important;
+                border-radius: 0 !important;
+            }
+
+            /* 移动端：侧边栏全屏覆盖 */
+            #ai-sidebar:not(.collapsed) {
+                width: 100% !important;
+            }
+        }
+
+        @media (max-width: 1023px) {
+            /* 平板端：调整间距 */
+            #main-stage {
+                padding: 1rem;
+            }
+        }
+
+        /* 确保在小屏幕上文本不会溢出 */
+        @media (max-width: 639px) {
+            h1 {
+                font-size: 1.25rem;
+            }
+            
+            .text-2xl {
+                font-size: 1.25rem;
+            }
+        }
+
+        /* 大屏幕：文件网格显示更多列 */
+        @media (min-width: 1536px) {
+            #file-grid {
+                grid-template-columns: repeat(5, minmax(0, 1fr));
+            }
+        }
+
+        @media (min-width: 1920px) {
+            #file-grid {
+                grid-template-columns: repeat(6, minmax(0, 1fr));
+            }
+        }
+
+        @media (min-width: 2560px) {
+            #file-grid {
+                grid-template-columns: repeat(7, minmax(0, 1fr));
+            }
+        }
+
+    </style>
+</head>
+<body class="flex overflow-hidden relative">
+
+    <button id="floating-robot" onclick="toggleWorkspace(true)"
+            class="fixed bottom-4 right-4 sm:bottom-10 sm:right-10 z-[100] w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-slate-900 border-2 sm:border-4 border-indigo-600 flex items-center justify-center hidden">
+        <i class="fa-solid fa-robot text-2xl sm:text-4xl text-indigo-400"></i>
+    </button>
+
+    <div id="app-container" class="fixed opacity-100 transform scale-[1] transition-all duration-500">
+
+        <div class="flex h-full w-full">
+
+            <main class="relative p-4 sm:p-6 md:p-8 lg:p-12 flex flex-col h-full overflow-y-auto" id="main-stage">
+
+                <div class="flex flex-col max-w-7xl mx-auto w-full h-full">
+                    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-6 sm:mb-8 md:mb-10 pb-4 border-b border-white/5 flex-shrink-0 gap-4 sm:gap-0">
+                        <div>
+                            <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-white">Sandbox OS PRO</h1>
+                            <p class="text-slate-400 text-xs sm:text-sm">工作区 / 文件管理</p>
+                        </div>
+
+                        <div class="flex gap-2 sm:gap-3 flex-wrap">
+                            <button onclick="fetchFiles()" class="w-10 h-10 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white flex items-center justify-center transition" title="刷新文件列表">
+                                <i class="fa-solid fa-sync-alt"></i>
+                            </button>
+                            <button onclick="document.getElementById('global-upload').click()" class="px-3 sm:px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium shadow-lg shadow-indigo-500/25 transition flex items-center gap-2">
+                                <i class="fa-solid fa-cloud-arrow-up"></i> <span class="upload-btn-text">上传文件</span>
+                            </button>
+                            <input type="file" id="global-upload" hidden multiple onchange="handleFileUpload(event)"/>
+                            <button onclick="toggleWorkspace(false)" class="w-10 h-10 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white flex items-center justify-center transition" title="收起应用">
+                                <i class="fa-solid fa-power-off"></i>
+                            </button>
+                        </div>
+                    </header>
+
+                    <div id="sandbox-grid-wrapper" class="flex-1 overflow-y-auto pr-1 sm:pr-2 pb-6 sm:pb-10">
+                        <div id="file-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+                            <div class="col-span-full text-center text-slate-500 mt-10" id="empty-state">
+                                <i class="fa-solid fa-cloud-upload-alt text-4xl mb-3"></i>
+                                <p>拖拽文件到此处，或点击“上传文件”按钮。</p>
+                                <p class="text-xs mt-1">请先启动 Python 后端服务 (server.py)。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="wake-btn" onclick="toggleSidebar()" class="fixed sm:absolute bottom-4 right-4 sm:bottom-8 sm:right-8 z-30 group transition-all duration-300 hover:scale-110 active:scale-95 hidden">
+                    <div class="relative w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-900 border border-indigo-500/50 text-indigo-400 flex items-center justify-center shadow-2xl">
+                        <i class="fa-solid fa-wand-magic-sparkles text-lg sm:text-xl"></i>
+                    </div>
+                </button>
+            </main>
+
+            <aside id="ai-sidebar" class="h-full bg-slate-900/80 backdrop-filter backdrop-blur-2xl border-l border-white/10 flex flex-col shadow-2xl relative z-50">
+                <div id="sidebar-content" class="flex flex-col h-full opacity-100 transition-opacity duration-300">
+                    <div class="h-14 sm:h-16 flex items-center justify-between px-4 sm:px-6 border-b border-white/5 bg-slate-900/50 flex-shrink-0">
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-sm sm:text-base font-semibold text-slate-100 tracking-wide">AI Assistant</h2>
+                        </div>
+                        <button onclick="toggleSidebar()" class="w-8 h-8 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white flex items-center justify-center transition" title="收起面板">
+                            <i class="fa-solid fa-arrow-right-to-bracket"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 sm:space-y-8 scroll-smooth" id="chat-container">
+                        <div class="flex gap-4">
+                            <div class="w-8 h-8 rounded bg-indigo-600/20 text-indigo-400 flex items-center justify-center flex-shrink-0 text-xs font-bold border border-indigo-500/20 mt-1">AI</div>
+                            <div class="bubble-ai p-4 rounded-2xl text-slate-300 text-sm leading-relaxed shadow-sm">
+                                <p>您好！我已连接到文件服务。请上传文件或开始对话！</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 sm:p-4 md:p-5 input-area relative flex-shrink-0">
+                        <div id="chat-input-wrapper" class="relative group">
+                            <textarea
+                                id="chat-input"
+                                class="w-full bg-slate-800/50 text-slate-200 text-sm p-3 sm:p-4 pr-12 sm:pr-14 rounded-xl border border-slate-700/50 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 focus:bg-slate-800 focus:outline-none resize-none placeholder-slate-500 transition-all shadow-inner h-12 sm:h-14 max-h-40 overflow-y-auto"
+                                placeholder="拖入文件或输入消息..."
+                                rows="1"
+                                onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }"
+                            ></textarea>
+
+                            <div class="absolute bottom-2 sm:bottom-2.5 right-2 flex items-center gap-1">
+                                <button class="p-1.5 sm:p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition shadow-lg shadow-indigo-600/20 transform active:scale-95" onclick="sendMessage()">
+                                    <i class="fa-solid fa-arrow-up text-xs sm:text-sm"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="text-center mt-1 sm:mt-2">
+                            <p class="text-[9px] sm:text-[10px] text-slate-600">AI 模型可能生成不准确的信息</p>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+        </div>
+    </div>
+
+    <div id="file-viewer-modal" class="fixed inset-0 z-[100] hidden items-center justify-center modal-overlay" onclick="closeFileViewer(event)">
+        <div id="modal-content-area" class="modal-content rounded-none sm:rounded-xl shadow-2xl w-full h-full sm:h-5/6 sm:max-w-4xl flex flex-col transform scale-95 opacity-0 transition-all duration-300" onclick="event.stopPropagation()">
+            <div class="p-3 sm:p-4 border-b border-white/10 flex justify-between items-center flex-shrink-0">
+                <h3 id="file-viewer-title" class="text-base sm:text-lg font-bold text-white truncate pr-2">文件预览</h3>
+                <button onclick="closeFileViewer()" class="text-slate-400 hover:text-white w-8 h-8 rounded-full hover:bg-slate-700 transition flex-shrink-0">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="flex-1 p-3 sm:p-4 md:p-6 overflow-y-auto text-slate-300 text-xs sm:text-sm">
+                <div class="bg-slate-800 p-3 sm:p-4 md:p-6 rounded-lg h-full">
+                    <p class="font-mono text-[10px] sm:text-xs text-green-400 mb-3 sm:mb-4">// 文件内容 (<span id="file-name-content"></span>)</p>
+                    <pre class="whitespace-pre-wrap text-slate-300 leading-relaxed text-xs sm:text-sm" id="file-content-display">
+                        正在加载文件内容...
+                    </pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container" class="fixed top-3 right-3 sm:top-5 sm:right-5 z-[110] space-y-2 max-w-[calc(100%-1.5rem)] sm:max-w-none"></div>
+
+
+    <script>
+        const API_BASE = 'http://localhost:5000'; // 后端服务地址
+        const sidebar = document.getElementById('ai-sidebar');
+        const sidebarContent = document.getElementById('sidebar-content');
+        const mainStage = document.getElementById('main-stage');
+        const wakeBtn = document.getElementById('wake-btn');
+        const inputWrapper = document.getElementById('chat-input-wrapper');
+        const appContainer = document.getElementById('app-container');
+        const floatingRobot = document.getElementById('floating-robot');
+        const fileGrid = document.getElementById('file-grid');
+        const sandboxWrapper = document.getElementById('sandbox-grid-wrapper');
+        const fileViewerModal = document.getElementById('file-viewer-modal');
+        const modalContent = document.getElementById('modal-content-area');
+
+
+        // --- 0. 通知/消息提示 (代替 alert) ---
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            let color = 'bg-indigo-600';
+            if (type === 'error') color = 'bg-red-600';
+            if (type === 'success') color = 'bg-green-600';
+
+            toast.className = `p-3 sm:p-4 rounded-lg text-white shadow-lg ${color} transition-all duration-300 transform translate-x-full opacity-0 text-sm sm:text-base max-w-[calc(100vw-1.5rem)] sm:max-w-sm`;
+            toast.textContent = message;
+            document.getElementById('toast-container').appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.remove('translate-x-full', 'opacity-0');
+                toast.classList.add('translate-x-0', 'opacity-100');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.remove('translate-x-0', 'opacity-100');
+                toast.classList.add('translate-x-full', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // --- 1. 窗口和侧边栏控制 ---
+
+        function toggleWorkspace(isOpen) {
+            if (isOpen) return;
+
+            appContainer.classList.add('opacity-0', 'scale-[0.5]');
+            setTimeout(() => {
+                appContainer.classList.add('hidden');
+            }, 500);
+        }
+
+        function toggleSidebar(forceOpen = false) {
+            const isCollapsed = sidebar.classList.contains('collapsed');
+            const isMobile = window.innerWidth < 640;
+
+            if (isCollapsed || forceOpen) {
+                sidebar.classList.remove('collapsed');
+                if (isMobile) {
+                    // 移动端：侧边栏打开时阻止主内容滚动
+                    document.body.style.overflow = 'hidden';
+                    // 添加遮罩层
+                    if (!document.getElementById('sidebar-overlay')) {
+                        const overlay = document.createElement('div');
+                        overlay.id = 'sidebar-overlay';
+                        overlay.className = 'fixed inset-0 bg-black/50 z-40 sm:hidden';
+                        overlay.onclick = () => toggleSidebar();
+                        document.body.appendChild(overlay);
+                    }
+                }
+                setTimeout(() => {
+                    sidebarContent.classList.remove('hidden');
+                }, isMobile ? 10 : 400);
+                wakeBtn.classList.add('hidden');
+            } else {
+                sidebarContent.classList.add('hidden');
+                if (isMobile) {
+                    // 移动端：侧边栏关闭时恢复滚动
+                    document.body.style.overflow = '';
+                    // 移除遮罩层
+                    const overlay = document.getElementById('sidebar-overlay');
+                    if (overlay) overlay.remove();
+                }
+                setTimeout(() => {
+                    sidebar.classList.add('collapsed');
+                }, 10);
+                wakeBtn.classList.remove('hidden');
+            }
+        }
+
+        // 监听窗口大小变化，调整侧边栏行为
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                const isMobile = window.innerWidth < 640;
+                if (!isMobile && sidebar.classList.contains('collapsed')) {
+                    // 从移动端切换到桌面端时，恢复滚动
+                    document.body.style.overflow = '';
+                }
+            }, 250);
+        });
+
+        // --- 2. 文件上传逻辑 (与后端交互) ---
+
+        async function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${API_BASE}/upload`, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showToast(`文件 ${file.name} 上传成功！`, 'success');
+                    fetchFiles(); // 刷新文件列表
+                    return true;
+                } else {
+                    showToast(`文件 ${file.name} 上传失败: ${result.error || '服务器错误'}`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                showToast(`网络错误或后端未运行，无法上传文件 ${file.name}`, 'error');
+                return false;
+            }
+        }
+
+        async function handleFileUpload(e) {
+            const files = e.target.files;
+            if (files.length > 0) {
+                for (const file of files) {
+                    await uploadFile(file);
+                }
+            }
+            e.target.value = '';
+        }
+
+        // --- 3. 拖拽上传处理 (Sandbox & Chat) ---
+
+        function preventDefaults (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        function handleDrop(e, target) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+
+            if (files.length > 0) {
+                if (target === 'sandbox') {
+                    for (const file of files) {
+                        uploadFile(file);
+                    }
+                } else if (target === 'chat') {
+                    const fileNames = Array.from(files).map(f => f.name).join(', ');
+                    showToast(`文件 ${fileNames} 已附加到消息。（AI附件功能待实现）`, 'info');
+                    // 实际应用中：将文件对象存储为消息附件
+                }
+            }
+        }
+
+        // Sandbox Drag Logic
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            sandboxWrapper.addEventListener(eventName, preventDefaults, false);
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            sandboxWrapper.addEventListener(eventName, () => sandboxWrapper.classList.add('drag-over'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            sandboxWrapper.addEventListener(eventName, () => sandboxWrapper.classList.remove('drag-over'), false);
+        });
+
+        sandboxWrapper.addEventListener('drop', (e) => handleDrop(e, 'sandbox'), false);
+
+        // Chat Drag Logic
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            inputWrapper.addEventListener(eventName, preventDefaults, false);
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            inputWrapper.addEventListener(eventName, () => inputWrapper.classList.add('drag-over-chat'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            inputWrapper.addEventListener(eventName, () => inputWrapper.classList.remove('drag-over-chat'), false);
+        });
+
+        inputWrapper.addEventListener('drop', (e) => handleDrop(e, 'chat'), false);
+
+        // --- 4. 文件列表与查看 ---
+
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            if (['pdf', 'doc', 'docx'].includes(ext)) return 'fa-regular fa-file-pdf text-red-400';
+            if (['png', 'jpg', 'jpeg', 'gif'].includes(ext)) return 'fa-regular fa-image text-purple-400';
+            if (['py', 'js', 'html', 'css', 'json', 'md', 'csv', 'xml'].includes(ext)) return 'fa-solid fa-code text-blue-400';
+            if (['txt', 'log'].includes(ext)) return 'fa-regular fa-file-alt text-slate-400';
+            return 'fa-regular fa-file text-gray-400';
+        }
+
+        function createCard(filename) {
+            const iconClass = getFileIcon(filename);
+            return `
+                <div class="glass-card sandbox-file-card p-4 sm:p-5 rounded-xl sm:rounded-2xl h-auto min-h-[10rem] sm:h-48 flex flex-col justify-between group cursor-pointer hover:shadow-lg transition transform hover:-translate-y-1" onclick="openFileViewer('${filename}')">
+                    <div class="flex justify-between items-start">
+                        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-white/5 text-lg sm:text-xl flex items-center justify-center border border-white/10">
+                            <i class="${iconClass}"></i>
+                        </div>
+                        <button class="text-slate-600 hover:text-white transition"><i class="fa-solid fa-ellipsis text-sm"></i></button>
+                    </div>
+                    <div>
+                        <h3 class="text-sm sm:text-base font-medium text-slate-200 group-hover:text-white truncate">${filename}</h3>
+                        <div class="flex items-center justify-between mt-2 sm:mt-3">
+                            <span class="text-[10px] sm:text-xs text-slate-500 font-mono">... KB</span>
+                            <span class="text-[10px] sm:text-xs text-slate-500">已上传</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function fetchFiles() {
+            try {
+                const response = await fetch(`${API_BASE}/files`);
+
+                if (response.ok) {
+                    const result = await response.json();
+                    const files = result.files || [];
+                    fileGrid.innerHTML = files.map(createCard).join('');
+                    document.getElementById('empty-state').style.display = files.length === 0 ? 'block' : 'none';
+                } else {
+                    // 如果状态码不是 200，尝试获取错误信息
+                    const errorText = await response.text();
+                    console.error('Fetch Files Failed (Non-200 Status):', response.status, errorText);
+                    fileGrid.innerHTML = `<p class="col-span-full text-red-400 mt-10">连接成功，但后端返回错误状态码 (${response.status})。</p>`;
+                    document.getElementById('empty-state').style.display = 'none';
+                }
+            } catch (error) {
+                // 网络错误或 JSON 解析错误会进入这里
+                console.error('Fetch Files Network/Parse Error:', error);
+                fileGrid.innerHTML = `<p class="col-span-full text-red-400 mt-10">网络错误: 后端服务未运行或地址错误。</p>`;
+                document.getElementById('empty-state').style.display = 'none';
+            }
+        }
+
+        // 文件查看器
+        async function openFileViewer(fileName) {
+            document.getElementById('file-viewer-title').textContent = `${fileName} - 预览`;
+            document.getElementById('file-name-content').textContent = fileName;
+            document.getElementById('file-content-display').textContent = "正在从服务器加载文件内容...";
+
+            fileViewerModal.classList.remove('hidden');
+            setTimeout(() => {
+                fileViewerModal.classList.add('opacity-100');
+                modalContent.classList.remove('scale-95', 'opacity-0');
+            }, 10);
+
+            try {
+                const response = await fetch(`${API_BASE}/file/${fileName}`);
+                if (response.ok) {
+                    const content = await response.text();
+                    document.getElementById('file-content-display').textContent = content;
+                } else {
+                    const errorText = await response.text();
+                    document.getElementById('file-content-display').textContent = `无法加载文件内容：${errorText}`;
+                    console.error('View File Error:', response.status, errorText);
+                }
+            } catch (error) {
+                document.getElementById('file-content-display').textContent = '网络错误：无法连接到后端服务以获取文件内容。';
+                console.error('View File Network Error:', error);
+            }
+        }
+
+        function closeFileViewer(e) {
+            if (e && e.target.id !== 'file-viewer-modal') return;
+
+            fileViewerModal.classList.remove('opacity-100');
+            modalContent.classList.add('scale-95', 'opacity-0');
+
+            setTimeout(() => {
+                fileViewerModal.classList.add('hidden');
+            }, 300);
+        }
+
+        // 聊天功能（仅模拟）
+        function sendMessage() {
+            const chatInput = document.getElementById('chat-input');
+            const message = chatInput.value.trim();
+            if (!message) return;
+
+            appendMessage(message, 'user');
+
+            // 检查并清空输入框
+            chatInput.value = '';
+            chatInput.style.height = 'auto'; // 重置高度
+
+            scrollToChatBottom();
+
+            // 模拟 AI 回复
+            setTimeout(() => {
+                appendMessage("抱歉，目前 AI 聊天功能尚未连接到实际的语言模型 API。", 'ai');
+                scrollToChatBottom();
+            }, 500);
+        }
+
+        function appendMessage(text, sender) {
+            const chatContainer = document.getElementById('chat-container');
+            const isAI = sender === 'ai';
+            const icon = isAI
+                ? '<div class="w-8 h-8 rounded bg-indigo-600/20 text-indigo-400 flex items-center justify-center flex-shrink-0 text-xs font-bold border border-indigo-500/20 mt-1">AI</div>'
+                : '<div class="w-8 h-8 rounded bg-slate-500/20 text-slate-300 flex items-center justify-center flex-shrink-0 text-xs font-bold border border-slate-500/20 mt-1">You</div>';
+            const bubbleClass = isAI ? 'bubble-ai' : 'bubble-user bg-indigo-600/30';
+            const textClass = isAI ? 'text-slate-300' : 'text-slate-100';
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'flex gap-4';
+            messageDiv.innerHTML = `
+                ${icon}
+                <div class="${bubbleClass} p-4 rounded-2xl ${textClass} text-sm leading-relaxed shadow-sm max-w-[80%] whitespace-pre-wrap">
+                    ${text}
+                </div>
+            `;
+            chatContainer.appendChild(messageDiv);
+        }
+
+        function scrollToChatBottom() {
+            const chatContainer = document.getElementById('chat-container');
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // 文本域高度自适应
+        document.addEventListener('DOMContentLoaded', () => {
+            const chatInput = document.getElementById('chat-input');
+            function adjustHeight() {
+                chatInput.style.height = 'auto';
+                chatInput.style.height = chatInput.scrollHeight + 'px';
+            }
+            chatInput.addEventListener('input', adjustHeight);
+
+            // 初始化：加载文件列表
+            fetchFiles();
+        });
+    </script>
+</body>
+</html>
