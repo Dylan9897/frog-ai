@@ -50,7 +50,9 @@ def list_documents():
         page = int(request.args.get('page', 1))
         page_size = int(request.args.get('page_size', 20))
         
+        print(f"[API] 获取文档列表: status={status}, page={page}, page_size={page_size}")
         result = _doc_service.list_documents(status, page, page_size)
+        print(f"[API] 查询到 {len(result['documents'])} 个文档，总计 {result['total']} 个")
         
         return jsonify({
             "success": True,
@@ -60,6 +62,9 @@ def list_documents():
             "page_size": result["page_size"]
         }), 200
     except Exception as e:
+        print(f"[API] 获取文档列表失败: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -86,7 +91,9 @@ def delete_document(document_id: str):
     }
     """
     try:
+        print(f"[API] 收到删除文档请求: {document_id}")
         success = _doc_service.delete_document(document_id)
+        print(f"[API] 删除结果: {success}")
         if success:
             return jsonify({
                 "success": True,
@@ -98,6 +105,9 @@ def delete_document(document_id: str):
                 "error": "文档不存在或删除失败"
             }), 404
     except Exception as e:
+        print(f"[API] 删除文档异常: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             "success": False,
             "error": f"删除失败: {str(e)}"

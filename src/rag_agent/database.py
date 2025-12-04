@@ -86,9 +86,9 @@ class DatabaseManager:
     
     def get_connection(self) -> sqlite3.Connection:
         """获取数据库连接"""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
-        # 启用外键约束
+        # 启用外键约束（必须在每个连接上启用）
         conn.execute('PRAGMA foreign_keys = ON')
         return conn
     
@@ -184,19 +184,42 @@ class DatabaseManager:
         conn = self.get_connection()
         cursor = conn.cursor()
         try:
-            # 启用外键约束
+            # 启用外键约束（确保级联删除生效）
             cursor.execute('PRAGMA foreign_keys = ON')
-            # 由于外键约束设置了 ON DELETE CASCADE，删除文档时会自动删除相关切片和任务
+            # 验证外键约束是否启用
+            cursor.execute('PRAGMA foreign_keys')
+            fk_enabled = cursor.fetchone()[0]
+            print(f"[Database] 外键约束状态: {fk_enabled}")
+            
+            # 先手动删除相关切片和任务（如果外键约束未生效）
+            try:
+                cursor.execute('DELETE FROM chunks WHERE document_id = ?', (document_id,))
+                chunks_deleted = cursor.rowcount
+                print(f"[Database] 删除相关切片: {chunks_deleted} 条")
+            except Exception as e:
+                print(f"[Database] 删除切片时出错（可能不存在）: {e}")
+            
+            try:
+                cursor.execute('DELETE FROM parsing_tasks WHERE document_id = ?', (document_id,))
+                tasks_deleted = cursor.rowcount
+                print(f"[Database] 删除相关任务: {tasks_deleted} 条")
+            except Exception as e:
+                print(f"[Database] 删除任务时出错（可能不存在）: {e}")
+            
+            # 删除文档记录
             cursor.execute('DELETE FROM documents WHERE id = ?', (document_id,))
-            conn.commit()
             deleted = cursor.rowcount > 0
+            
             if deleted:
-                print(f"成功删除文档: {document_id}")
+                conn.commit()
+                print(f"[Database] 成功删除文档: {document_id}，已提交事务")
             else:
-                print(f"文档不存在: {document_id}")
+                conn.rollback()
+                print(f"[Database] 文档不存在: {document_id}，已回滚事务")
+            
             return deleted
         except Exception as e:
-            print(f"删除文档失败: {e}")
+            print(f"[Database] 删除文档失败: {e}")
             import traceback
             traceback.print_exc()
             conn.rollback()

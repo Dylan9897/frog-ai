@@ -90,24 +90,35 @@ class DocumentService:
         输出: 是否成功
         """
         try:
+            print(f"[DocumentService] 开始删除文档: {document_id}")
             # 1. 获取文档信息（用于删除文件）
             document = self.db.get_document(document_id)
             if not document:
+                print(f"[DocumentService] 文档不存在: {document_id}")
                 return False
+            
+            print(f"[DocumentService] 找到文档: {document.name}, 文件路径: {document.file_path}")
             
             # 2. 删除物理文件
             file_path = Path(document.file_path)
             if file_path.exists():
                 try:
                     file_path.unlink()
+                    print(f"[DocumentService] 成功删除物理文件: {file_path}")
                 except Exception as e:
-                    print(f"删除文件失败: {e}")
+                    print(f"[DocumentService] 删除文件失败: {e}")
                     # 文件删除失败不影响数据库删除
+            else:
+                print(f"[DocumentService] 文件不存在，跳过删除: {file_path}")
             
             # 3. 删除数据库记录（级联删除相关切片和任务）
-            return self.db.delete_document(document_id)
+            result = self.db.delete_document(document_id)
+            print(f"[DocumentService] 数据库删除结果: {result}")
+            return result
         except Exception as e:
-            print(f"删除文档失败: {e}")
+            print(f"[DocumentService] 删除文档失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def update_document_status(

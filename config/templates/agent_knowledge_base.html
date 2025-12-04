@@ -204,7 +204,7 @@
                                 <span>${file.chunks_count || 0} 切片</span>
                             </div>
                         </div>
-                        <button class="action-link delete" onclick="event.stopPropagation(); event.preventDefault(); KnowledgeOS.deleteDocument('${file.id}', ${JSON.stringify(file.name)})" title="删除文档" style="flex-shrink: 0;">🗑</button>
+                        <button class="action-link delete" data-doc-id="${file.id}" data-doc-name="${file.name.replace(/"/g, '&quot;')}" title="删除文档" style="flex-shrink: 0;">🗑</button>
                     </div>
                 `).join('');
             },
@@ -224,14 +224,34 @@
             /** 加载文档列表 */
             loadDocuments: async function() {
                 try {
-                    const response = await fetch(`${this.API_BASE}/api/rag/documents`);
+                    // 添加时间戳防止缓存
+                    const url = `${this.API_BASE}/api/rag/documents?t=${Date.now()}`;
+                    console.log('加载文档列表:', url);
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        headers: {
+                            'Cache-Control': 'no-cache'
+                        }
+                    });
                     const data = await response.json();
+                    console.log('文档列表响应:', data);
                     if (data.success) {
                         this.config.files = data.documents;
+                        console.log(`加载到 ${this.config.files.length} 个文档`);
                         this.renderSidebar();
+                        // 如果当前活跃文件已被删除，清空活跃状态
+                        if (this.config.activeFileId && !this.config.files.find(f => f.id === this.config.activeFileId)) {
+                            this.config.activeFileId = null;
+                            document.getElementById('doc-title-display').innerHTML = '';
+                            this.config.chunks = [];
+                            this.renderChunks();
+                            this.renderPDFAndParsedText(1);
+                        }
                         if (this.config.files.length > 0 && !this.config.activeFileId) {
                             this.setActiveFile(this.config.files[0].id);
                         }
+                    } else {
+                        console.error('加载文档列表失败:', data.error);
                     }
                 } catch (error) {
                     console.error('加载文档列表失败:', error);
@@ -269,15 +289,26 @@
                 
                 try {
                     console.log(`正在删除文档: ${documentId}`);
-                    const response = await fetch(`${this.API_BASE}/api/rag/documents/${documentId}`, {
+                    const url = `${this.API_BASE}/api/rag/documents/${documentId}`;
+                    console.log(`删除请求 URL: ${url}`);
+                    
+                    const response = await fetch(url, {
                         method: 'DELETE',
                         headers: {
                             'Content-Type': 'application/json'
                         }
                     });
                     
+                    console.log(`删除响应状态: ${response.status} ${response.statusText}`);
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('删除响应错误:', errorText);
+                        throw new Error(`HTTP ${response.status}: ${errorText}`);
+                    }
+                    
                     const data = await response.json();
-                    console.log('删除响应:', data);
+                    console.log('删除响应数据:', data);
                     
                     if (data.success) {
                         // 如果删除的是当前活跃文件，清空活跃状态
@@ -512,6 +543,24 @@
                 // 4. 绑定拖拽事件（调整大小）
                 this.makeResizable(document.getElementById('resizer-sidebar'), document.getElementById('sidebar'), true);
                 this.makeResizable(document.getElementById('resizer-horizontal'), document.getElementById('comparison-area'), false);
+
+                // 5. 使用事件委托绑定删除按钮
+                const sidebar = document.getElementById('sidebar-file-list');
+                if (sidebar) {
+                    sidebar.addEventListener('click', (e) => {
+                        const deleteBtn = e.target.closest('.action-link.delete');
+                        if (deleteBtn) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const docId = deleteBtn.getAttribute('data-doc-id');
+                            const docName = deleteBtn.getAttribute('data-doc-name');
+                            if (docId && docName) {
+                                console.log('点击删除按钮:', docId, docName);
+                                this.deleteDocument(docId, docName);
+                            }
+                        }
+                    });
+                }
 
                 console.log("Knowledge OS V8.1 初始化完成.");
             }
