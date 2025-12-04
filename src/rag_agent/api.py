@@ -121,14 +121,94 @@ def get_page_content(document_id: str, page_number: int):
     """
     获取文档页面内容（PDF预览）
     查询参数:
-      - format: 返回格式（image/png, text, json）
+      - format: 返回格式（image/png, image/jpeg）
     输出: {
       "success": bool,
-      "page": PageContent.to_dict()
+      "page": {
+        "page_number": int,
+        "image_url": str,  # 图片 URL
+        "width": int,
+        "height": int
+      }
     }
     """
-    # TODO: 实现页面内容获取
-    pass
+    try:
+        from flask import send_file
+        from pathlib import Path
+        
+        # 获取页面信息
+        page_info = _db.get_page(document_id, page_number)
+        if not page_info:
+            return jsonify({
+                "success": False,
+                "error": f"页面 {page_number} 不存在"
+            }), 404
+        
+        image_path = Path(page_info['image_path'])
+        if not image_path.exists():
+            return jsonify({
+                "success": False,
+                "error": "图片文件不存在"
+            }), 404
+        
+        # 返回图片文件
+        return send_file(
+            str(image_path),
+            mimetype=f"image/{page_info.get('format', 'png')}",
+            as_attachment=False
+        )
+    except Exception as e:
+        print(f"[API] 获取页面内容失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@rag_bp.route('/documents/<document_id>/pages', methods=['GET'])
+def list_pages(document_id: str):
+    """
+    获取文档的所有页面信息
+    输出: {
+      "success": bool,
+      "pages": [
+        {
+          "page_number": int,
+          "image_url": str,
+          "width": int,
+          "height": int
+        }
+      ],
+      "total": int
+    }
+    """
+    try:
+        pages = _db.list_pages(document_id)
+        pages_data = []
+        for page in pages:
+            pages_data.append({
+                "page_number": page['page_number'],
+                "image_url": f"/api/rag/documents/{document_id}/pages/{page['page_number']}",
+                "width": page.get('width'),
+                "height": page.get('height'),
+                "format": page.get('format', 'png')
+            })
+        
+        return jsonify({
+            "success": True,
+            "pages": pages_data,
+            "total": len(pages_data)
+        }), 200
+    except Exception as e:
+        print(f"[API] 获取页面列表失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 
 @rag_bp.route('/documents/<document_id>/parsed-text', methods=['GET'])

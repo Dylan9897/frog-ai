@@ -75,11 +75,29 @@ class DatabaseManager:
             )
         ''')
         
+        # 创建 document_pages 表（存储页面图片信息）
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS document_pages (
+                id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL,
+                page_number INTEGER NOT NULL,
+                image_path TEXT NOT NULL,
+                width INTEGER,
+                height INTEGER,
+                format TEXT DEFAULT 'png',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+                UNIQUE(document_id, page_number)
+            )
+        ''')
+        
         # 创建索引
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_chunks_status ON chunks(status)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_document_id ON parsing_tasks(document_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_pages_document_id ON document_pages(document_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_pages_doc_page ON document_pages(document_id, page_number)')
         
         conn.commit()
         conn.close()
@@ -176,8 +194,31 @@ class DatabaseManager:
     
     def update_document(self, document: Document) -> bool:
         """更新文档"""
-        # TODO: 实现文档更新
-        pass
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                UPDATE documents SET
+                    name = ?, file_path = ?, file_size = ?, file_type = ?,
+                    status = ?, total_pages = ?, chunks_count = ?,
+                    updated_at = ?, parsed_at = ?, metadata = ?
+                WHERE id = ?
+            ''', (
+                document.name, document.file_path, document.file_size, document.file_type,
+                document.status.value, document.total_pages, document.chunks_count,
+                document.updated_at, document.parsed_at, json.dumps(document.metadata, ensure_ascii=False),
+                document.id
+            ))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            print(f"更新文档失败: {e}")
+            import traceback
+            traceback.print_exc()
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
     
     def delete_document(self, document_id: str) -> bool:
         """删除文档（级联删除相关切片和任务）"""
@@ -222,6 +263,76 @@ class DatabaseManager:
             print(f"[Database] 删除文档失败: {e}")
             import traceback
             traceback.print_exc()
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+    
+    # ==================== Document Pages 操作 ====================
+    
+    def create_page(self, document_id: str, page_number: int, image_path: str, 
+                    width: Optional[int] = None, height: Optional[int] = None, 
+                    format: str = 'png') -> bool:
+        """创建页面图片记录"""
+        import uuid
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            page_id = f"page-{uuid.uuid4().hex[:12]}"
+            cursor.execute('''
+                INSERT OR REPLACE INTO document_pages 
+                (id, document_id, page_number, image_path, width, height, format)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (page_id, document_id, page_number, image_path, width, height, format))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"创建页面记录失败: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+    
+    def get_page(self, document_id: str, page_number: int) -> Optional[Dict[str, Any]]:
+        """获取页面信息"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                SELECT * FROM document_pages 
+                WHERE document_id = ? AND page_number = ?
+            ''', (document_id, page_number))
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
+        finally:
+            conn.close()
+    
+    def list_pages(self, document_id: str) -> List[Dict[str, Any]]:
+        """获取文档的所有页面"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                SELECT * FROM document_pages 
+                WHERE document_id = ?
+                ORDER BY page_number ASC
+            ''', (document_id,))
+            return [dict(row) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+    
+    def delete_pages(self, document_id: str) -> bool:
+        """删除文档的所有页面（级联删除时自动执行）"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('DELETE FROM document_pages WHERE document_id = ?', (document_id,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"删除页面记录失败: {e}")
             conn.rollback()
             return False
         finally:

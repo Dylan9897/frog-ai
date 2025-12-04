@@ -9,6 +9,7 @@ from datetime import datetime
 from ..models import Document, DocumentStatus
 from ..database import DatabaseManager
 from ..config import RAG_CONFIG
+from ..parsers.pdf_parser import PDFParser
 
 
 class DocumentService:
@@ -18,6 +19,10 @@ class DocumentService:
         self.db = db
         self.documents_dir = Path(RAG_CONFIG["storage"]["documents_dir"])
         self.documents_dir.mkdir(parents=True, exist_ok=True)
+        self.pages_dir = Path(RAG_CONFIG["storage"]["pages_dir"])
+        self.pages_dir.mkdir(parents=True, exist_ok=True)
+        # 初始化解析器
+        self.pdf_parser = PDFParser(str(self.pages_dir))
     
     def upload_document(self, file, name: Optional[str] = None) -> Document:
         """上传文档"""
@@ -56,8 +61,63 @@ class DocumentService:
         
         # 保存到数据库
         if self.db.create_document(document):
+            # 如果是 PDF 文件，异步转换为图片（后台处理）
+            if file_ext == 'pdf':
+                import threading
+                document.status = DocumentStatus.PROCESSING
+                self.db.update_document(document)
+                # 在后台线程中处理
+                thread = threading.Thread(target=self._convert_document_to_images, args=(document,), daemon=True)
+                thread.start()
             return document
         raise Exception("保存文档到数据库失败")
+    
+    def _convert_document_to_images(self, document: Document):
+        """
+        将文档转换为图片（按页）
+        输入: document - Document 对象
+        """
+        try:
+            print(f"[DocumentService] 开始转换文档为图片: {document.id}")
+            
+            # 使用 PDF 解析器转换
+            pages_info = self.pdf_parser.convert_to_images(
+                document.file_path,
+                document.id,
+                format='png'
+            )
+            
+            if not pages_info:
+                print(f"[DocumentService] 未生成任何页面图片")
+                document.status = DocumentStatus.FAILED
+                self.db.update_document(document)
+                return
+            
+            # 保存页面信息到数据库
+            for page_info in pages_info:
+                self.db.create_page(
+                    document_id=document.id,
+                    page_number=page_info['page_number'],
+                    image_path=page_info['image_path'],
+                    width=page_info.get('width'),
+                    height=page_info.get('height'),
+                    format=page_info.get('format', 'png')
+                )
+            
+            # 更新文档的总页数和状态
+            document.total_pages = len(pages_info)
+            document.status = DocumentStatus.COMPLETED
+            document.parsed_at = datetime.now()
+            self.db.update_document(document)
+            
+            print(f"[DocumentService] 成功转换 {len(pages_info)} 页图片")
+        except Exception as e:
+            print(f"[DocumentService] 转换图片失败: {e}")
+            import traceback
+            traceback.print_exc()
+            # 更新状态为失败
+            document.status = DocumentStatus.FAILED
+            self.db.update_document(document)
     
     def get_document(self, document_id: str) -> Optional[Document]:
         """
@@ -111,7 +171,17 @@ class DocumentService:
             else:
                 print(f"[DocumentService] 文件不存在，跳过删除: {file_path}")
             
-            # 3. 删除数据库记录（级联删除相关切片和任务）
+            # 3. 删除页面图片目录
+            pages_dir = self.pages_dir / document.id
+            if pages_dir.exists():
+                try:
+                    import shutil
+                    shutil.rmtree(pages_dir)
+                    print(f"[DocumentService] 成功删除页面图片目录: {pages_dir}")
+                except Exception as e:
+                    print(f"[DocumentService] 删除页面图片目录失败: {e}")
+            
+            # 4. 删除数据库记录（级联删除相关切片和任务）
             result = self.db.delete_document(document_id)
             print(f"[DocumentService] 数据库删除结果: {result}")
             return result

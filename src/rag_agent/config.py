@@ -17,7 +17,8 @@ RAG_CONFIG = {
         "documents_dir": str(DATA_DIR / "documents"),
         "parsed_text_dir": str(DATA_DIR / "parsed"),
         "embeddings_dir": str(DATA_DIR / "embeddings"),
-        "temp_dir": str(DATA_DIR / "temp")
+        "temp_dir": str(DATA_DIR / "temp"),
+        "pages_dir": str(DATA_DIR / "pages")  # 页面图片存储目录
     },
     "parsing": {
         "supported_formats": ["pdf", "docx", "xlsx", "xls", "txt", "md", "json"],

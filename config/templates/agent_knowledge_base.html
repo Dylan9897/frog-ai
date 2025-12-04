@@ -50,8 +50,20 @@
         .file-item.hidden { display: none; }
         .file-item-content { flex: 1; cursor: pointer; min-width: 0; }
         .file-name { font-size: 14px; margin-bottom: 4px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .file-meta { font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between; }
+        .file-meta { font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center; }
         .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; }
+        .processing-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(112, 89, 251, 0.3); border-top-color: var(--brand-primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 4px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .page-controls { display: flex; align-items: center; gap: 8px; }
+        .page-input { width: 60px; padding: 4px 8px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: 12px; text-align: center; }
+        .page-input:focus { outline: none; border-color: var(--brand-primary); }
+        .page-btn { padding: 4px 8px; background: rgba(112, 89, 251, 0.1); border: 1px solid var(--brand-primary); border-radius: 4px; color: var(--brand-primary); cursor: pointer; font-size: 12px; transition: all 0.2s; }
+        .page-btn:hover { background: rgba(112, 89, 251, 0.2); }
+        .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        #pdf-content { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        #pdf-content img { transition: transform 0.1s; cursor: move; user-select: none; }
+        #pdf-content img.zoomed { cursor: move; }
+        #pdf-content img.dragging { cursor: grabbing; transition: none; }
 
         .main-workspace { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
         .top-header { height: 60px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: rgba(18, 19, 31, 0.8); backdrop-filter: blur(10px); }
@@ -75,8 +87,8 @@
         .panel-body.scrollable { overflow: auto; align-items: flex-start; justify-content: flex-start; }
         .panel-body.highlighted { background-color: rgba(0, 240, 255, 0.08); } /* 跳转高亮效果 */
 
-        .pdf-image-mock { max-width: 100%; max-height: 100%; object-fit: contain; transition: all 0.3s; width: 80%; height: 80%; background: #26273b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #586075; border: 1px dashed rgba(255,255,255,0.1); }
-        .pdf-image-mock.zoomed { max-width: none; max-height: none; width: 150%; }
+        .pdf-image-mock { max-width: 100%; max-height: 100%; object-fit: contain; transition: all 0.3s; display: flex; align-items: center; justify-content: center; }
+        .pdf-image-mock.zoomed { max-width: none; max-height: none; }
 
         .text-stream-content { padding: 30px; overflow-y: auto; color: #d1d5db; font-size: 14px; line-height: 1.8; }
         .text-stream-content h3 { color: var(--text-main); margin-top: 0; font-size: 18px; }
@@ -150,7 +162,12 @@
                 <div class="panel">
                     <div class="panel-header">
                         <span>原文档视图 (PDF)</span>
-                        <div class="header-action" onclick="KnowledgeOS.toggleZoom()">🔍 缩放视图 (测试滚动条)</div>
+                        <div class="page-controls" id="page-controls" style="display: none;">
+                            <button class="page-btn" id="page-prev" onclick="KnowledgeOS.changePage(-1)">◀</button>
+                            <input type="number" class="page-input" id="page-input" min="1" value="1" onchange="KnowledgeOS.goToPage(parseInt(this.value))">
+                            <span style="color: var(--text-secondary); font-size: 12px;">/ <span id="page-total">0</span></span>
+                            <button class="page-btn" id="page-next" onclick="KnowledgeOS.changePage(1)">▶</button>
+                        </div>
                     </div>
                     <div class="panel-body" id="pdf-wrapper">
                         <div class="pdf-image-mock" id="pdf-content"></div>
@@ -192,7 +209,15 @@
                 activeFileId: null, // 当前活跃文件 ID
                 files: [],
                 chunks: [],
-                searchKeyword: '' // 搜索关键词
+                searchKeyword: '', // 搜索关键词
+                currentPage: 1, // 当前页码
+                totalPages: 0, // 总页数
+                imageScale: 1.0, // 图片缩放比例
+                imageOffsetX: 0, // 图片X偏移
+                imageOffsetY: 0, // 图片Y偏移
+                isDragging: false, // 是否正在拖拽
+                dragStartX: 0, // 拖拽起始X
+                dragStartY: 0 // 拖拽起始Y
             },
 
             // ------------------ 渲染模块 ------------------
@@ -236,8 +261,9 @@
                         <div class="file-item-content" onclick="KnowledgeOS.setActiveFile('${file.id}')">
                             <span class="file-name">${this.highlightSearchKeyword(file.name, searchKeyword)}</span>
                             <div class="file-meta">
-                                <span style="color: ${file.status_color || 'var(--text-secondary)'};">
-                                    <span class="status-dot" style="background:${file.status_color || 'var(--text-secondary)'}"></span>${this.getStatusText(file.status)}
+                                <span style="color: ${file.status_color || 'var(--text-secondary)'}; display: flex; align-items: center;">
+                                    ${file.status === 'processing' ? '<span class="processing-spinner"></span>' : `<span class="status-dot" style="background:${file.status_color || 'var(--text-secondary)'}"></span>`}
+                                    ${this.getStatusText(file.status)}
                                 </span>
                                 <span>${file.chunks_count || 0} 切片</span>
                             </div>
@@ -316,7 +342,13 @@
                     });
                     const data = await response.json();
                     if (data.success) {
-                        return { success: true, filename: file.name };
+                        // 立即刷新文档列表，显示新上传的文件（状态为 processing）
+                        await this.loadDocuments();
+                        // 如果是 PDF，启动后台处理状态轮询
+                        if (file.name.toLowerCase().endsWith('.pdf')) {
+                            this.pollDocumentStatus(data.document.id);
+                        }
+                        return { success: true, filename: file.name, document: data.document };
                     } else {
                         return { success: false, filename: file.name, error: data.error || '未知错误' };
                     }
@@ -324,6 +356,49 @@
                     console.error('上传失败:', error);
                     return { success: false, filename: file.name, error: error.message };
                 }
+            },
+            
+            /** 轮询文档处理状态 */
+            pollDocumentStatus: function(documentId) {
+                const maxAttempts = 60; // 最多轮询60次（5分钟）
+                let attempts = 0;
+                
+                const poll = async () => {
+                    if (attempts >= maxAttempts) {
+                        console.log(`[轮询] 文档 ${documentId} 处理超时`);
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch(`${this.API_BASE}/api/rag/documents?t=${Date.now()}`);
+                        const data = await response.json();
+                        if (data.success) {
+                            const doc = data.documents.find(d => d.id === documentId);
+                            if (doc) {
+                                // 更新文件状态
+                                const fileIndex = this.config.files.findIndex(f => f.id === documentId);
+                                if (fileIndex !== -1) {
+                                    this.config.files[fileIndex] = doc;
+                                    this.renderSidebar();
+                                    
+                                    // 如果文档已完成处理，停止轮询
+                                    if (doc.status === 'completed' || doc.status === 'failed') {
+                                        console.log(`[轮询] 文档 ${documentId} 处理完成，状态: ${doc.status}`);
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('[轮询] 获取文档状态失败:', error);
+                    }
+                    
+                    attempts++;
+                    // 每5秒轮询一次
+                    setTimeout(poll, 5000);
+                };
+                
+                poll();
             },
             
             /** 批量上传文档 */
@@ -441,34 +516,149 @@
                 `).join('');
             },
 
-            /** 渲染 PDF/解析文本内容 (模拟) */
-            renderPDFAndParsedText: function(page = 3) {
+            /** 渲染 PDF/解析文本内容 */
+            renderPDFAndParsedText: async function(page = 1) {
                 const pdfContent = document.getElementById('pdf-content');
                 const parsedText = document.getElementById('parsed-text-content');
 
-                // 模拟 PDF 渲染
-                pdfContent.innerHTML = `[ PDF 预览区域 ]<br>第 ${page} 页`;
+                if (!this.config.activeFileId) {
+                    pdfContent.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">请选择一个文档</div>';
+                    parsedText.innerHTML = '';
+                    document.getElementById('page-controls').style.display = 'none';
+                    return;
+                }
 
-                // 模拟解析文本渲染
-                parsedText.innerHTML = `
-                    <h3>第 ${page} 页内容概要</h3>
-                    <p style="opacity: 0.6; font-size: 12px; margin-bottom: 20px;">[系统提示] 成功加载 ${this.config.activeFileId} 的第 ${page} 页内容。</p>
-                    <p>这是从文档中解析出的核心文本。具体切片来自这里... </p>
-                    <p>（此处模拟该页面的解析内容）</p>
-                `;
+                const activeFile = this.config.files.find(f => f.id === this.config.activeFileId);
+                if (!activeFile) {
+                    pdfContent.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">文档不存在</div>';
+                    parsedText.innerHTML = '';
+                    document.getElementById('page-controls').style.display = 'none';
+                    return;
+                }
+
+                // 更新总页数（优先从文档对象获取，否则从 API 获取）
+                this.config.totalPages = activeFile.total_pages || 0;
+                this.config.currentPage = page;
+                
+                console.log('[页码] 文档信息:', {
+                    id: activeFile.id,
+                    status: activeFile.status,
+                    total_pages: activeFile.total_pages,
+                    config_totalPages: this.config.totalPages
+                });
+
+                // 如果总页数为0，尝试从 API 获取页面列表
+                if (this.config.totalPages === 0) {
+                    try {
+                        console.log('[页码] 尝试从 API 获取页面列表...');
+                        const pagesResponse = await fetch(`${this.API_BASE}/api/rag/documents/${this.config.activeFileId}/pages?t=${Date.now()}`);
+                        const pagesData = await pagesResponse.json();
+                        console.log('[页码] 页面列表响应:', pagesData);
+                        if (pagesData.success && pagesData.total > 0) {
+                            this.config.totalPages = pagesData.total;
+                            // 更新文件信息
+                            const fileIndex = this.config.files.findIndex(f => f.id === this.config.activeFileId);
+                            if (fileIndex !== -1) {
+                                this.config.files[fileIndex].total_pages = pagesData.total;
+                            }
+                            console.log('[页码] 成功获取总页数:', this.config.totalPages);
+                        } else {
+                            console.log('[页码] 页面列表为空或获取失败');
+                        }
+                    } catch (e) {
+                        console.error('[页码] 获取页面列表失败:', e);
+                    }
+                }
+
+                // 更新页码控制器
+                const pageControls = document.getElementById('page-controls');
+                const pageInput = document.getElementById('page-input');
+                const pageTotal = document.getElementById('page-total');
+                const pagePrev = document.getElementById('page-prev');
+                const pageNext = document.getElementById('page-next');
+
+                console.log('[页码] 更新控制器，总页数:', this.config.totalPages);
+                
+                if (this.config.totalPages > 0) {
+                    pageControls.style.display = 'flex';
+                    pageInput.value = page;
+                    pageTotal.textContent = this.config.totalPages;
+                    pagePrev.disabled = page <= 1;
+                    pageNext.disabled = page >= this.config.totalPages;
+                    console.log('[页码] 页码控制器已显示');
+                } else {
+                    pageControls.style.display = 'none';
+                    console.log('[页码] 页码控制器已隐藏（总页数为0）');
+                }
+
+                // 如果文档正在处理中
+                if (activeFile.status === 'processing') {
+                    pdfContent.innerHTML = `
+                        <div style="padding: 40px; text-align: center; color: var(--text-secondary);">
+                            <div class="processing-spinner" style="width: 40px; height: 40px; border-width: 4px; margin: 0 auto 16px;"></div>
+                            <div>正在处理文档，请稍候...</div>
+                        </div>
+                    `;
+                    parsedText.innerHTML = '';
+                    return;
+                }
+
+                try {
+                    // 加载页面图片
+                    const imageUrl = `${this.API_BASE}/api/rag/documents/${this.config.activeFileId}/pages/${page}`;
+                    const img = document.createElement('img');
+                    img.src = imageUrl;
+                    img.alt = `第 ${page} 页`;
+                    img.style.cssText = 'max-width: 100%; max-height: 100%; object-fit: contain; transform: scale(' + this.config.imageScale + ') translate(' + (this.config.imageOffsetX || 0) + 'px, ' + (this.config.imageOffsetY || 0) + 'px); transform-origin: center center;';
+                    img.className = this.config.imageScale > 1 ? 'zoomed' : '';
+                    img.draggable = false; // 禁用默认拖拽
+                    
+                    img.onload = () => {
+                        // 图片加载成功后，如果总页数仍为0，再次尝试获取
+                        if (this.config.totalPages === 0) {
+                            console.log('[页码] 图片加载成功，但总页数为0，再次尝试获取页面列表');
+                            this.fetchPagesCount();
+                        }
+                    };
+                    
+                    img.onerror = () => {
+                        pdfContent.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">页面 ' + page + ' 加载失败</div>';
+                    };
+                    
+                    pdfContent.innerHTML = '';
+                    pdfContent.appendChild(img);
+                    
+                    // 绑定图片拖拽功能
+                    this.setupImageDrag(img);
+
+                    // 模拟解析文本渲染（后续可以替换为真实数据）
+                    parsedText.innerHTML = `
+                        <h3>第 ${page} 页内容概要</h3>
+                        <p style="opacity: 0.6; font-size: 12px; margin-bottom: 20px;">[系统提示] 成功加载 ${this.config.activeFileId} 的第 ${page} 页内容。</p>
+                        <p>这是从文档中解析出的核心文本。具体切片来自这里... </p>
+                        <p>（此处模拟该页面的解析内容）</p>
+                    `;
+                } catch (error) {
+                    console.error('加载页面失败:', error);
+                    pdfContent.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">加载页面失败</div>';
+                }
             },
 
             // ------------------ 交互方法 ------------------
 
             /** 切换活跃文件 */
-            setActiveFile: function(fileId) {
+            setActiveFile: async function(fileId) {
                 if (this.config.activeFileId !== fileId) {
                     this.config.activeFileId = fileId;
+                    this.config.currentPage = 1;
+                    this.config.imageScale = 1.0; // 重置缩放
+                    this.config.imageOffsetX = 0; // 重置偏移
+                    this.config.imageOffsetY = 0; // 重置偏移
                     const activeFile = this.config.files.find(f => f.id === fileId);
                     if (activeFile) {
                         this.renderSidebar();
                         this.renderChunks();
-                        this.renderPDFAndParsedText(1);
+                        await this.renderPDFAndParsedText(1);
                         document.getElementById('doc-title-display').innerHTML = `${activeFile.name} <span class="status-badge">知识切分审核中</span>`;
                         console.log(`文件已切换到: ${fileId}`);
                     }
@@ -479,11 +669,11 @@
              * [核心功能点 1] 点击知识库卡片的来源时，原文档视图 (PDF)跳转至对应的页面。
              * @param {number} page - 要跳转的目标页码。
              */
-            jumpToPage: function(page) {
+            jumpToPage: async function(page) {
                 const pdfWrapper = document.getElementById('pdf-wrapper');
 
                 // 1. 更新 PDF 视图内容
-                this.renderPDFAndParsedText(page);
+                await this.renderPDFAndParsedText(page);
 
                 // 2. 添加视觉高亮反馈
                 pdfWrapper.classList.add('highlighted');
@@ -500,18 +690,128 @@
                 console.log(`已跳转至 PDF 第 ${page} 页`);
             },
 
-            /** 切换缩放状态 (智能滚动条) */
-            toggleZoom: function() {
+            /** 切换页码 */
+            changePage: function(delta) {
+                const newPage = this.config.currentPage + delta;
+                if (newPage >= 1 && newPage <= this.config.totalPages) {
+                    this.goToPage(newPage);
+                }
+            },
+            
+            /** 跳转到指定页码 */
+            goToPage: async function(page) {
+                if (page >= 1 && page <= this.config.totalPages) {
+                    await this.renderPDFAndParsedText(page);
+                }
+            },
+            
+            /** 缩放图片 */
+            zoomImage: function(delta) {
+                const minScale = 0.5;
+                const maxScale = 3.0;
+                const scaleStep = 0.2; // 增大步长，响应更快
+                
+                this.config.imageScale = Math.max(minScale, Math.min(maxScale, this.config.imageScale + delta * scaleStep));
+                
+                const img = document.querySelector('#pdf-content img');
+                if (img) {
+                    this.updateImageTransform(img);
+                }
+            },
+            
+            /** 更新图片变换 */
+            updateImageTransform: function(img) {
+                if (!img) return;
+                img.style.transform = 'scale(' + this.config.imageScale + ') translate(' + (this.config.imageOffsetX || 0) + 'px, ' + (this.config.imageOffsetY || 0) + 'px)';
+                img.className = this.config.imageScale > 1 ? 'zoomed' : '';
+                
+                // 如果放大，启用滚动
                 const wrapper = document.getElementById('pdf-wrapper');
-                const content = document.getElementById('pdf-content');
-
-                content.classList.toggle('zoomed');
-                wrapper.classList.toggle('scrollable', content.classList.contains('zoomed'));
-
-                if (!content.classList.contains('zoomed')) {
+                if (this.config.imageScale > 1) {
+                    wrapper.classList.add('scrollable');
+                } else {
+                    wrapper.classList.remove('scrollable');
                     wrapper.scrollTop = 0;
                     wrapper.scrollLeft = 0;
+                    // 重置偏移
+                    this.config.imageOffsetX = 0;
+                    this.config.imageOffsetY = 0;
                 }
+            },
+            
+            /** 获取页面总数 */
+            fetchPagesCount: async function() {
+                if (!this.config.activeFileId) return;
+                try {
+                    const pagesResponse = await fetch(`${this.API_BASE}/api/rag/documents/${this.config.activeFileId}/pages?t=${Date.now()}`);
+                    const pagesData = await pagesResponse.json();
+                    if (pagesData.success && pagesData.total > 0) {
+                        this.config.totalPages = pagesData.total;
+                        // 更新文件信息
+                        const fileIndex = this.config.files.findIndex(f => f.id === this.config.activeFileId);
+                        if (fileIndex !== -1) {
+                            this.config.files[fileIndex].total_pages = pagesData.total;
+                        }
+                        // 更新页码控制器显示
+                        const pageControls = document.getElementById('page-controls');
+                        const pageInput = document.getElementById('page-input');
+                        const pageTotal = document.getElementById('page-total');
+                        const pagePrev = document.getElementById('page-prev');
+                        const pageNext = document.getElementById('page-next');
+                        if (pageControls && this.config.totalPages > 0) {
+                            pageControls.style.display = 'flex';
+                            pageInput.value = this.config.currentPage;
+                            pageTotal.textContent = this.config.totalPages;
+                            pagePrev.disabled = this.config.currentPage <= 1;
+                            pageNext.disabled = this.config.currentPage >= this.config.totalPages;
+                            console.log('[页码] 延迟获取成功，总页数:', this.config.totalPages);
+                        }
+                    }
+                } catch (e) {
+                    console.error('[页码] 延迟获取页面列表失败:', e);
+                }
+            },
+            
+            /** 设置图片拖拽功能 */
+            setupImageDrag: function(img) {
+                if (!img) return;
+                
+                let isDragging = false;
+                let startX = 0;
+                let startY = 0;
+                let startOffsetX = 0;
+                let startOffsetY = 0;
+                
+                img.addEventListener('mousedown', (e) => {
+                    if (this.config.imageScale > 1) {
+                        isDragging = true;
+                        this.config.isDragging = true;
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        startOffsetX = this.config.imageOffsetX || 0;
+                        startOffsetY = this.config.imageOffsetY || 0;
+                        img.classList.add('dragging');
+                        e.preventDefault();
+                    }
+                });
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (isDragging && this.config.imageScale > 1) {
+                        const deltaX = e.clientX - startX;
+                        const deltaY = e.clientY - startY;
+                        this.config.imageOffsetX = startOffsetX + deltaX / this.config.imageScale;
+                        this.config.imageOffsetY = startOffsetY + deltaY / this.config.imageScale;
+                        this.updateImageTransform(img);
+                    }
+                });
+                
+                document.addEventListener('mouseup', () => {
+                    if (isDragging) {
+                        isDragging = false;
+                        this.config.isDragging = false;
+                        img.classList.remove('dragging');
+                    }
+                });
             },
 
             // ------------------ 初始化和辅助工具 ------------------
@@ -661,6 +961,25 @@
                             }
                         }
                     });
+                }
+
+                // 7. 绑定鼠标滚轮缩放（优化响应速度）
+                const pdfWrapper = document.getElementById('pdf-wrapper');
+                if (pdfWrapper) {
+                    let wheelTimeout = null;
+                    pdfWrapper.addEventListener('wheel', (e) => {
+                        // 按住 Ctrl 键时缩放，或者直接滚轮缩放（不按Ctrl）
+                        if (e.ctrlKey || e.metaKey) {
+                            e.preventDefault();
+                            // 清除之前的延迟
+                            if (wheelTimeout) {
+                                clearTimeout(wheelTimeout);
+                            }
+                            // 立即响应，不使用延迟
+                            const delta = e.deltaY > 0 ? -0.2 : 0.2;
+                            this.zoomImage(delta);
+                        }
+                    }, { passive: false });
                 }
 
                 console.log("Knowledge OS V8.1 初始化完成.");
