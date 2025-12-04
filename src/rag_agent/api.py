@@ -6,7 +6,8 @@ from flask import Blueprint, request, jsonify
 from .database import DatabaseManager
 from .services.document_service import DocumentService
 from .services.text_parsing_service import TextParsingService
-from .models import DocumentStatus
+from .services.chunk_service import ChunkService
+from .models import DocumentStatus, ChunkStatus
 
 # 创建蓝图
 rag_bp = Blueprint('rag', __name__, url_prefix='/api/rag')
@@ -15,6 +16,7 @@ rag_bp = Blueprint('rag', __name__, url_prefix='/api/rag')
 _db = DatabaseManager()
 _doc_service = DocumentService(_db)
 _text_parsing_service = TextParsingService(_db)
+_chunk_service = ChunkService(_db)
 
 
 # ==================== 文档管理接口 ====================
@@ -72,15 +74,14 @@ def list_documents():
 
 @rag_bp.route('/documents/<document_id>', methods=['GET'])
 def get_document(document_id: str):
-    """
-    获取文档详情
-    输出: {
-      "success": bool,
-      "document": Document.to_dict()
-    }
-    """
-    # TODO: 实现文档详情查询
-    pass
+    """获取文档详情"""
+    try:
+        document = _doc_service.get_document(document_id)
+        if not document:
+            return jsonify({"success": False, "error": "文档未找到"}), 404
+        return jsonify({"success": True, "document": document.to_dict()}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @rag_bp.route('/documents/<document_id>', methods=['DELETE'])
@@ -350,112 +351,155 @@ def parse_document(document_id: str):
 
 @rag_bp.route('/documents/<document_id>/chunks', methods=['GET'])
 def list_chunks(document_id: str):
-    """
-    获取文档的知识切片列表
-    查询参数:
-      - status: 切片状态
-      - page: 页码
-      - page_size: 每页数量
-    输出: {
-      "success": bool,
-      "chunks": [Chunk.to_dict()],
-      "total": int,
-      "page": int,
-      "page_size": int
-    }
-    """
-    # TODO: 实现切片列表查询
-    pass
+    """获取文档的知识切片列表"""
+    try:
+        status_str = request.args.get('status')
+        status = ChunkStatus(status_str) if status_str else None
+        page = request.args.get('page', default=1, type=int)
+        page_size = request.args.get('page_size', default=20, type=int)
+
+        result = _chunk_service.list_chunks(document_id, status, page, page_size)
+        return jsonify(
+            {
+                "success": True,
+                "chunks": [chunk.to_dict() for chunk in result["chunks"]],
+                "total": result["total"],
+                "page": result["page"],
+                "page_size": result["page_size"],
+            }
+        ), 200
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @rag_bp.route('/documents/<document_id>/chunks', methods=['POST'])
 def create_chunk(document_id: str):
-    """
-    创建知识切片
-    输入: {
-      "content": str,
-      "source_page": int,
-      "start_char": int,
-      "end_char": int,
-      "tags": [str]
-    }
-    输出: {
-      "success": bool,
-      "chunk": Chunk.to_dict()
-    }
-    """
-    # TODO: 实现切片创建
-    pass
+    """创建知识切片"""
+    try:
+        data = request.get_json(force=True) or {}
+        content = (data.get("content") or "").strip()
+        source_page = data.get("source_page")
+        if not content:
+            return jsonify({"success": False, "error": "content 不能为空"}), 400
+        if source_page is None:
+            source_page = 1
+
+        tags = data.get("tags") or []
+        start_char = data.get("start_char")
+        end_char = data.get("end_char")
+
+        chunk = _chunk_service.create_chunk(
+            document_id=document_id,
+            content=content,
+            source_page=int(source_page),
+            tags=tags,
+            start_char=start_char,
+            end_char=end_char,
+        )
+        return jsonify({"success": True, "chunk": chunk.to_dict()}), 201
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @rag_bp.route('/chunks/<chunk_id>', methods=['PUT'])
 def update_chunk(chunk_id: str):
-    """
-    更新知识切片
-    输入: {
-      "content": str (可选),
-      "tags": [str] (可选),
-      "source_page": int (可选)
-    }
-    输出: {
-      "success": bool,
-      "chunk": Chunk.to_dict()
-    }
-    """
-    # TODO: 实现切片更新
-    pass
+    """更新知识切片"""
+    try:
+        data = request.get_json(force=True) or {}
+        content = data.get("content")
+        tags = data.get("tags")
+        source_page = data.get("source_page")
+
+        chunk = _chunk_service.update_chunk(
+            chunk_id=chunk_id,
+            content=content,
+            tags=tags,
+            source_page=source_page,
+        )
+        if not chunk:
+            return jsonify({"success": False, "error": "切片未找到"}), 404
+        return jsonify({"success": True, "chunk": chunk.to_dict()}), 200
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @rag_bp.route('/chunks/<chunk_id>', methods=['DELETE'])
 def delete_chunk(chunk_id: str):
-    """
-    删除知识切片
-    输出: {
-      "success": bool,
-      "message": str
-    }
-    """
-    # TODO: 实现切片删除
-    pass
+    """删除知识切片"""
+    try:
+        success = _chunk_service.delete_chunk(chunk_id)
+        if success:
+            return jsonify({"success": True, "message": "切片已删除"}), 200
+        return jsonify({"success": False, "error": "切片未找到"}), 404
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @rag_bp.route('/chunks/<chunk_id>/confirm', methods=['POST'])
 def confirm_chunk(chunk_id: str):
-    """
-    确认切片入库
-    输入: {
-      "status": str  # "confirmed" 或 "archived"
-    }
-    输出: {
-      "success": bool,
-      "chunk": Chunk.to_dict()
-    }
-    """
-    # TODO: 实现切片确认
-    pass
+    """确认切片入库 / 归档"""
+    try:
+        data = request.get_json(force=True) or {}
+        status_str = (data.get("status") or "").lower()
+        if status_str == "archived":
+            status = ChunkStatus.ARCHIVED
+        else:
+            status = ChunkStatus.CONFIRMED
+
+        chunk = _chunk_service.confirm_chunk(chunk_id, status=status)
+        if not chunk:
+            return jsonify({"success": False, "error": "切片未找到"}), 404
+        return jsonify({"success": True, "chunk": chunk.to_dict()}), 200
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @rag_bp.route('/documents/<document_id>/auto-chunk', methods=['POST'])
 def auto_chunk(document_id: str):
     """
-    自动分块（从文档生成切片）
-    输入: {
-      "chunker_type": str,  # "semantic" 或 "rule"
-      "chunk_size": int,
-      "chunk_overlap": int,
-      "min_chunk_size": int
-    }
-    输出: {
-      "success": bool,
-      "task_id": str,
-      "chunks_created": int,
-      "message": str
-    }
+    自动分块（从文档生成知识切片，默认使用大模型语义分块）
     """
-    # TODO: 实现自动分块
-    # 1. 获取文档解析后的文本
-    # 2. 使用分块器进行分块
-    # 3. 创建切片记录
-    # 4. 返回结果
-    pass
+    try:
+        data = request.get_json(force=True) or {}
+        chunker_type = data.get("chunker_type", "semantic")
+        chunk_size = int(data.get("chunk_size", 500))
+        chunk_overlap = int(data.get("chunk_overlap", 50))
+        min_chunk_size = int(data.get("min_chunk_size", 100))
+
+        chunks = _chunk_service.auto_chunk(
+            document_id=document_id,
+            chunker_type=chunker_type,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            min_chunk_size=min_chunk_size,
+        )
+        return jsonify(
+            {
+                "success": True,
+                "chunks_created": len(chunks),
+                "chunks": [c.to_dict() for c in chunks],
+            }
+        ), 200
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 

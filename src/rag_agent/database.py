@@ -358,13 +358,71 @@ class DatabaseManager:
     
     def create_chunk(self, chunk: Chunk) -> bool:
         """创建切片记录"""
-        # TODO: 实现切片创建
-        pass
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                INSERT INTO chunks (
+                    id, document_id, content, tags, source_page,
+                    start_char, end_char, status,
+                    created_at, updated_at, confirmed_at, embedding
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    chunk.id,
+                    chunk.document_id,
+                    chunk.content,
+                    json.dumps(chunk.tags, ensure_ascii=False) if chunk.tags else None,
+                    chunk.source_page,
+                    chunk.start_char,
+                    chunk.end_char,
+                    chunk.status.value,
+                    chunk.created_at,
+                    chunk.updated_at,
+                    chunk.confirmed_at,
+                    json.dumps(chunk.embedding) if chunk.embedding is not None else None,
+                ),
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"创建切片失败: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+    
+    def _row_to_chunk(self, row) -> Chunk:
+        """将数据库行转换为 Chunk 对象"""
+        return Chunk(
+            id=row["id"],
+            document_id=row["document_id"],
+            content=row["content"],
+            tags=json.loads(row["tags"]) if row["tags"] else [],
+            source_page=row["source_page"],
+            start_char=row["start_char"],
+            end_char=row["end_char"],
+            status=ChunkStatus(row["status"]),
+            created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else None,
+            updated_at=datetime.fromisoformat(row["updated_at"]) if row["updated_at"] else None,
+            confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
+            embedding=json.loads(row["embedding"]) if row["embedding"] else None,
+        )
     
     def get_chunk(self, chunk_id: str) -> Optional[Chunk]:
         """获取切片"""
-        # TODO: 实现切片查询
-        pass
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT * FROM chunks WHERE id = ?", (chunk_id,))
+            row = cursor.fetchone()
+            if row:
+                return self._row_to_chunk(row)
+            return None
+        finally:
+            conn.close()
     
     def list_chunks(
         self,
@@ -374,40 +432,213 @@ class DatabaseManager:
         page_size: int = 20
     ) -> Tuple[List[Chunk], int]:
         """列出切片（分页）"""
-        # TODO: 实现分页查询
-        pass
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            offset = (page - 1) * page_size
+            params: Tuple[Any, ...]
+
+            if status:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM chunks WHERE document_id = ? AND status = ?",
+                    (document_id, status.value),
+                )
+                total = cursor.fetchone()[0]
+                cursor.execute(
+                    """
+                    SELECT * FROM chunks
+                    WHERE document_id = ? AND status = ?
+                    ORDER BY created_at ASC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (document_id, status.value, page_size, offset),
+                )
+            else:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM chunks WHERE document_id = ?",
+                    (document_id,),
+                )
+                total = cursor.fetchone()[0]
+                cursor.execute(
+                    """
+                    SELECT * FROM chunks
+                    WHERE document_id = ?
+                    ORDER BY created_at ASC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (document_id, page_size, offset),
+                )
+
+            chunks = [self._row_to_chunk(row) for row in cursor.fetchall()]
+            return chunks, total
+        finally:
+            conn.close()
     
     def update_chunk(self, chunk: Chunk) -> bool:
         """更新切片"""
-        # TODO: 实现切片更新
-        pass
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                UPDATE chunks SET
+                    content = ?,
+                    tags = ?,
+                    source_page = ?,
+                    start_char = ?,
+                    end_char = ?,
+                    status = ?,
+                    updated_at = ?,
+                    confirmed_at = ?,
+                    embedding = ?
+                WHERE id = ?
+                """,
+                (
+                    chunk.content,
+                    json.dumps(chunk.tags, ensure_ascii=False) if chunk.tags else None,
+                    chunk.source_page,
+                    chunk.start_char,
+                    chunk.end_char,
+                    chunk.status.value,
+                    chunk.updated_at,
+                    chunk.confirmed_at,
+                    json.dumps(chunk.embedding) if chunk.embedding is not None else None,
+                    chunk.id,
+                ),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            print(f"更新切片失败: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
     
     def delete_chunk(self, chunk_id: str) -> bool:
         """删除切片"""
-        # TODO: 实现切片删除
-        pass
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM chunks WHERE id = ?", (chunk_id,))
+            deleted = cursor.rowcount > 0
+            if deleted:
+                conn.commit()
+            else:
+                conn.rollback()
+            return deleted
+        except Exception as e:
+            print(f"删除切片失败: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
     
     def count_chunks(self, document_id: str, status: Optional[ChunkStatus] = None) -> int:
         """统计切片数量"""
-        # TODO: 实现统计
-        pass
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            if status:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM chunks WHERE document_id = ? AND status = ?",
+                    (document_id, status.value),
+                )
+            else:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM chunks WHERE document_id = ?",
+                    (document_id,),
+                )
+            row = cursor.fetchone()
+            return int(row[0]) if row else 0
+        finally:
+            conn.close()
     
     # ==================== ParsingTask 操作 ====================
     
     def create_task(self, task: ParsingTask) -> bool:
         """创建解析任务"""
-        # TODO: 实现任务创建
-        pass
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                INSERT INTO parsing_tasks (
+                    id, document_id, status, progress,
+                    error_message, created_at, completed_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    task.id,
+                    task.document_id,
+                    task.status.value,
+                    task.progress,
+                    task.error_message,
+                    task.created_at,
+                    task.completed_at,
+                ),
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"创建解析任务失败: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
     
     def get_task(self, task_id: str) -> Optional[ParsingTask]:
         """获取任务"""
-        # TODO: 实现任务查询
-        pass
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT * FROM parsing_tasks WHERE id = ?", (task_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return ParsingTask(
+                id=row["id"],
+                document_id=row["document_id"],
+                status=TaskStatus(row["status"]),
+                progress=row["progress"],
+                error_message=row["error_message"],
+                created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else None,
+                completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
+            )
+        finally:
+            conn.close()
     
     def update_task(self, task: ParsingTask) -> bool:
         """更新任务"""
-        # TODO: 实现任务更新
-        pass
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                UPDATE parsing_tasks SET
+                    status = ?,
+                    progress = ?,
+                    error_message = ?,
+                    completed_at = ?
+                WHERE id = ?
+                """,
+                (
+                    task.status.value,
+                    task.progress,
+                    task.error_message,
+                    task.completed_at,
+                    task.id,
+                ),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            print(f"更新解析任务失败: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
     
     # ==================== ParsedText 操作 ====================
     

@@ -78,12 +78,14 @@
 
         .comparison-container { 
             height: 55%; 
+            flex: 0 0 55%;
             display: flex; 
             background-color: var(--bg-universe); 
             width: 100%;
             max-width: 100%;
             overflow: hidden;
             box-sizing: border-box;
+            position: relative;
         }
         .panel { 
             display: flex; 
@@ -140,7 +142,7 @@
         .text-stream-content { 
             /* 右侧 AI 解析文本主容器：始终在可视区域内滚动显示，不再依赖浏览器整体缩放 */
             padding: 18px 22px;
-            overflow-y: auto;
+            overflow-y: auto; 
             overflow-x: hidden;
             color: #d1d5db; 
             font-size: 14px;
@@ -155,7 +157,7 @@
             position: relative;
             background: radial-gradient(circle at top left, rgba(112, 89, 251, 0.06), transparent 55%);
         }
-
+        
         /* 解析区域内部：只做必要的防溢出处理，避免复杂 contain/white-space 导致在部分浏览器需要缩放才能看到内容 */
         .text-stream-content * {
             max-width: 100%;
@@ -323,7 +325,12 @@
         }
         .chunks-header { padding: 15px 24px; display: flex; justify-content: space-between; align-items: center; }
         .section-title { font-size: 14px; font-weight: 700; color: var(--text-secondary); }
-        .btn-create { background: var(--brand-primary); color: #fff; border: none; padding: 6px 16px; border-radius: 4px; font-size: 12px; cursor: pointer; box-shadow: 0 2px 10px rgba(112, 89, 251, 0.3); transition: 0.2s; }
+        .chunks-header-actions { display: flex; gap: 10px; align-items: center; }
+        .btn-create { background: linear-gradient(135deg, var(--brand-primary) 0%, #5a47d4 100%); color: #fff; border: none; padding: 7px 20px; border-radius: 999px; font-size: 12px; cursor: pointer; box-shadow: 0 4px 14px rgba(112, 89, 251, 0.4); transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; letter-spacing: 0.3px; }
+        .btn-create.secondary { background: linear-gradient(135deg, rgba(0, 240, 255, 0.12) 0%, rgba(112, 89, 251, 0.12) 100%); color: var(--brand-cyan); border: 1px solid rgba(0, 240, 255, 0.3); box-shadow: 0 2px 10px rgba(0, 240, 255, 0.2); }
+        .btn-create.secondary:hover { background: linear-gradient(135deg, rgba(0, 240, 255, 0.2) 0%, rgba(112, 89, 251, 0.2) 100%); color: #fff; border-color: var(--brand-cyan); box-shadow: 0 4px 16px rgba(0, 240, 255, 0.4); transform: translateY(-1px); }
+        .btn-create:disabled { opacity: 0.6; cursor: not-allowed; box-shadow: none; transform: none; filter: grayscale(0.6); }
+        .btn-create:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(112, 89, 251, 0.6); transform: translateY(-2px); }
 
         .chunks-list { flex: 1; padding: 0 24px 30px 24px; overflow-y: auto; }
         .chunk-card { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 16px; position: relative; transition: all 0.3s; }
@@ -344,8 +351,213 @@
         .action-link.delete { color: var(--text-secondary); font-size: 14px; padding: 6px 8px; }
         .action-link.delete:hover { color: #ff4757; background: rgba(255, 71, 87, 0.15); }
 
+        .chunk-status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            margin-left: 8px;
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-secondary);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .chunk-status-badge.confirmed {
+            background: rgba(0, 210, 182, 0.12);
+            color: var(--brand-success);
+            border-color: rgba(0, 210, 182, 0.4);
+        }
+
         .btn-confirm { background: rgba(0, 210, 182, 0.1); color: var(--brand-success); border: 1px solid rgba(0, 210, 182, 0.3); padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; transition: 0.2s; }
         .btn-confirm:hover { background: var(--brand-success); color: #000; }
+        .btn-confirm.disabled,
+        .btn-confirm:disabled {
+            opacity: 0.6;
+            cursor: default;
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-secondary);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        /* 知识切片编辑弹窗样式 - 星云风格 */
+        .chunk-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at 50% 50%, rgba(112, 89, 251, 0.12), rgba(0, 0, 0, 0.8));
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+            animation: fadeIn 0.25s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .chunk-modal {
+            width: min(760px, 92vw);
+            max-height: 85vh;
+            background: linear-gradient(145deg, #1c1d2e 0%, #12131f 100%);
+            border-radius: 18px;
+            border: 1px solid rgba(112, 89, 251, 0.3);
+            box-shadow: 
+                0 25px 80px rgba(0, 0, 0, 0.9),
+                0 0 0 1px rgba(112, 89, 251, 0.15) inset,
+                0 10px 40px rgba(112, 89, 251, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            animation: slideUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes slideUp {
+            from { 
+                opacity: 0;
+                transform: translateY(40px) scale(0.94);
+            }
+            to { 
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        .chunk-modal-header {
+            padding: 20px 26px;
+            border-bottom: 1px solid rgba(112, 89, 251, 0.18);
+            background: rgba(112, 89, 251, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chunk-modal-title {
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--text-main);
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .chunk-modal-title::before {
+            content: '✨';
+            font-size: 20px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.1); }
+        }
+        .chunk-modal-close {
+            border: none;
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 22px;
+            line-height: 1;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.25s ease;
+        }
+        .chunk-modal-close:hover {
+            background: rgba(255, 71, 87, 0.18);
+            color: #ff4757;
+            transform: rotate(90deg) scale(1.1);
+        }
+        .chunk-modal-body {
+            padding: 22px 26px 18px 26px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .chunk-modal-body > div {
+            display: flex;
+            flex-direction: column;
+        }
+        .chunk-modal-body label {
+            font-size: 13px;
+            color: var(--brand-cyan);
+            font-weight: 500;
+            display: block;
+            margin-bottom: 10px;
+            letter-spacing: 0.4px;
+        }
+        #chunk-modal-content {
+            width: 100%;
+            min-height: 150px;
+            max-height: 320px;
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 12px;
+            border: 1px solid rgba(112, 89, 251, 0.25);
+            color: var(--text-main);
+            padding: 14px 16px;
+            font-size: 14px;
+            line-height: 1.7;
+            resize: vertical;
+            transition: all 0.25s ease;
+            font-family: 'Noto Sans SC', sans-serif;
+        }
+        #chunk-modal-content:focus,
+        #chunk-modal-tags:focus,
+        #chunk-modal-page:focus {
+            outline: none;
+            border-color: var(--brand-primary);
+            background: rgba(112, 89, 251, 0.1);
+            box-shadow: 0 0 0 4px rgba(112, 89, 251, 0.15);
+        }
+        #chunk-modal-tags,
+        #chunk-modal-page {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 12px;
+            border: 1px solid rgba(112, 89, 251, 0.25);
+            color: var(--text-main);
+            padding: 11px 14px;
+            font-size: 14px;
+            transition: all 0.25s ease;
+        }
+        .chunk-modal-footer {
+            padding: 16px 26px 20px 26px;
+            border-top: 1px solid rgba(112, 89, 251, 0.18);
+            background: rgba(0, 0, 0, 0.25);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+        .chunk-modal-btn {
+            padding: 9px 24px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 500;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.25s ease;
+            letter-spacing: 0.4px;
+        }
+        .chunk-modal-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+        }
+        .chunk-modal-btn.primary {
+            background: linear-gradient(135deg, var(--brand-primary) 0%, #5a47d4 100%);
+            color: #fff;
+            border-color: transparent;
+            box-shadow: 0 4px 16px rgba(112, 89, 251, 0.45);
+        }
+        .chunk-modal-btn.primary:hover {
+            background: linear-gradient(135deg, var(--brand-cyan) 0%, var(--brand-primary) 100%);
+            box-shadow: 0 8px 24px rgba(0, 240, 255, 0.5);
+            transform: translateY(-3px);
+        }
     </style>
 </head>
 <body>
@@ -401,7 +613,7 @@
                     </div>
                     <!-- 右侧解析结果使用独立可滚动容器，避免整体页面缩放才能看到内容 -->
                     <div class="panel-body scrollable">
-                        <div class="text-stream-content" id="parsed-text-content"></div>
+                    <div class="text-stream-content" id="parsed-text-content"></div>
                     </div>
                 </div>
             </section>
@@ -411,11 +623,42 @@
             <section class="chunks-container">
                 <div class="chunks-header">
                     <span class="section-title" id="chunks-section-title">知识切片列表 (共 0 条)</span>
-                    <button class="btn-create">✨ 创建新切片</button>
+                    <div class="chunks-header-actions">
+                        <button class="btn-create secondary" id="btn-create-manual">✂ 创建新切片</button>
+                        <button class="btn-create" id="btn-auto-chunk">✨ 自动生成知识库</button>
+                    </div>
                 </div>
                 <div class="chunks-list" id="chunks-list"></div>
             </section>
         </main>
+    </div>
+
+    <!-- 知识切片编辑 / 创建弹窗 -->
+    <div class="chunk-modal-overlay" id="chunk-modal-overlay">
+        <div class="chunk-modal">
+            <div class="chunk-modal-header">
+                <span class="chunk-modal-title" id="chunk-modal-title">编辑知识切片</span>
+                <button class="chunk-modal-close" id="chunk-modal-close-btn">×</button>
+            </div>
+            <div class="chunk-modal-body">
+                <div>
+                    <label for="chunk-modal-content">切片内容</label>
+                    <textarea id="chunk-modal-content" placeholder="在这里编辑或输入知识切片内容"></textarea>
+                </div>
+                <div>
+                    <label for="chunk-modal-tags">标签（逗号分隔，例如：备孕, 时间表）</label>
+                    <input id="chunk-modal-tags" type="text" placeholder="可选，使用逗号或顿号分隔多个标签">
+                </div>
+                <div>
+                    <label for="chunk-modal-page">来源页码</label>
+                    <input id="chunk-modal-page" type="number" min="1" value="1">
+                </div>
+            </div>
+            <div class="chunk-modal-footer">
+                <button class="chunk-modal-btn" id="chunk-modal-cancel-btn">取消</button>
+                <button class="chunk-modal-btn primary" id="chunk-modal-save-btn">保存</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -438,7 +681,8 @@
                 imageOffsetY: 0, // 图片Y偏移
                 isDragging: false, // 是否正在拖拽
                 dragStartX: 0, // 拖拽起始X
-                dragStartY: 0 // 拖拽起始Y
+                dragStartY: 0, // 拖拽起始Y
+                isAutoChunking: false // 是否正在自动生成知识切片
             },
 
             // ------------------ 渲染模块 ------------------
@@ -761,13 +1005,18 @@
                 document.getElementById('chunks-section-title').innerText = `知识切片列表 (共 ${this.config.chunks.length} 条)`;
 
                 if (this.config.chunks.length === 0) {
-                    list.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">暂无知识切片</div>';
+                    list.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">暂无知识切片，点击右上角按钮可用大模型自动生成。</div>';
                     return;
                 }
 
                 list.innerHTML = this.config.chunks.map(chunk => `
                     <div class="chunk-card">
-                        <span class="chunk-id">ID: ${chunk.id}</span>
+                        <span class="chunk-id">
+                            ID: ${chunk.id}
+                            <span class="chunk-status-badge ${chunk.status === 'confirmed' ? 'confirmed' : ''}">
+                                ${chunk.status === 'confirmed' ? '已入库' : '待审核'}
+                            </span>
+                        </span>
                         <div class="chunk-content">${chunk.content}</div>
                         <div class="chunk-footer">
                             <div class="tags-group">
@@ -775,13 +1024,37 @@
                                 ${chunk.source_page ? `<div class="source-btn" onclick="KnowledgeOS.jumpToPage(${chunk.source_page})">📄 来源: 第 ${chunk.source_page} 页</div>` : ''}
                             </div>
                             <div class="actions-group">
-                                <button class="action-link delete">🗑 删除</button>
-                                <button class="action-link">✏️ 修改</button>
-                                <button class="btn-confirm">✔ 确认入库</button>
+                                <button class="action-link delete" data-chunk-id="${chunk.id}">🗑 删除</button>
+                                <button class="action-link edit" data-chunk-id="${chunk.id}">✏️ 修改</button>
+                                <button class="btn-confirm ${chunk.status === 'confirmed' ? 'disabled' : ''}" data-chunk-id="${chunk.id}" ${chunk.status === 'confirmed' ? 'disabled' : ''}>
+                                    ${chunk.status === 'confirmed' ? '已入库' : '✔ 确认入库'}
+                                </button>
                             </div>
                         </div>
                     </div>
                 `).join('');
+            },
+
+            /** 加载当前文档的知识切片 */
+            loadChunksForActiveDocument: async function() {
+                if (!this.config.activeFileId) {
+                    this.config.chunks = [];
+                    this.renderChunks();
+                    return;
+                }
+                try {
+                    const url = `${this.API_BASE}/api/rag/documents/${this.config.activeFileId}/chunks`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    if (data.success) {
+                        this.config.chunks = data.chunks || [];
+                        this.renderChunks();
+                    } else {
+                        console.error('加载知识切片失败:', data.error);
+                    }
+                } catch (e) {
+                    console.error('加载知识切片失败:', e);
+                }
             },
 
             /** 加载解析文本（Markdown） */
@@ -1304,7 +1577,7 @@
                     const activeFile = this.config.files.find(f => f.id === fileId);
                     if (activeFile) {
                         this.renderSidebar();
-                        this.renderChunks();
+                        await this.loadChunksForActiveDocument();
                         await this.renderPDFAndParsedText(1);
                         document.getElementById('doc-title-display').innerHTML = `${activeFile.name} <span class="status-badge">知识切分审核中</span>`;
                         console.log(`文件已切换到: ${fileId}`);
@@ -1463,23 +1736,42 @@
 
             // ------------------ 初始化和辅助工具 ------------------
 
-            /** 模块拖拽调整大小逻辑 (🚀 优化 2: 使用 requestAnimationFrame 提高流畅度) */
+            /** 模块拖拽调整大小逻辑 (优化版：支持动态内容和稳定拖拽) */
             makeResizable: function(resizer, prevSibling, isVertical) {
+                if (!resizer || !prevSibling) return;
+                
                 let x = 0;
                 let y = 0;
                 let prevSize = 0;
-                let animationFrameId = null; // 用于存储 rAF 句柄
+                let animationFrameId = null;
 
                 const updateSize = function(dx, dy) {
                     if (isVertical) {
-                        // 确保最小宽度，防止拖到看不见 (侧边栏最小 100px)
-                        const newWidth = Math.max(100, prevSize + dx);
+                        // 侧边栏最小 140px
+                        const newWidth = Math.max(140, prevSize + dx);
                         prevSibling.style.width = `${newWidth}px`;
+                        prevSibling.style.flexBasis = `${newWidth}px`;
                     } else {
-                        // 确保最小高度 (对比视图最小 100px)
-                        const newHeight = Math.max(100, prevSize + dy);
-                        // 当拖拽改变 height 时，flex 布局会自动调整下方 content 的大小
+                        // 横向拖拽：精确控制上下区域的高度
+                        const parent = prevSibling.parentElement;
+                        if (!parent) return;
+                        
+                        const parentRect = parent.getBoundingClientRect();
+                        const resizerRect = resizer.getBoundingClientRect();
+                        const parentHeight = parentRect.height;
+                        const minTop = 180;   // 对比视图最小高度
+                        const minBottom = 200; // 知识切片列表最小高度
+                        const resizerHeight = resizerRect.height || 5;
+
+                        let newHeight = prevSize + dy;
+                        const maxTop = parentHeight - minBottom - resizerHeight;
+                        newHeight = Math.max(minTop, Math.min(maxTop, newHeight));
+
+                        // 同时设置 height 和 flex-basis 确保稳定性
                         prevSibling.style.height = `${newHeight}px`;
+                        prevSibling.style.flexBasis = `${newHeight}px`;
+                        prevSibling.style.flexShrink = '0';
+                        prevSibling.style.flexGrow = '0';
                     }
                     animationFrameId = null;
                 };
@@ -1488,14 +1780,15 @@
                     const dx = e.clientX - x;
                     const dy = e.clientY - y;
 
-                    // 只有在没有等待的动画帧时才请求新的帧
                     if (animationFrameId === null) {
                         animationFrameId = window.requestAnimationFrame(() => updateSize(dx, dy));
                     }
                 };
 
                 const mouseDownHandler = function(e) {
-                    e.preventDefault(); // 阻止文本选择
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
                     x = e.clientX;
                     y = e.clientY;
                     const rect = prevSibling.getBoundingClientRect();
@@ -1504,21 +1797,28 @@
                     document.addEventListener('mousemove', mouseMoveHandler);
                     document.addEventListener('mouseup', mouseUpHandler);
                     resizer.style.borderColor = 'var(--brand-primary)';
-                    // 拖拽时，设置全局光标以提高体验
+                    resizer.style.background = 'rgba(112, 89, 251, 0.15)';
                     document.body.style.cursor = isVertical ? 'col-resize' : 'row-resize';
+                    document.body.style.userSelect = 'none';
                 };
 
                 const mouseUpHandler = function() {
                     document.removeEventListener('mousemove', mouseMoveHandler);
                     document.removeEventListener('mouseup', mouseUpHandler);
                     resizer.style.borderColor = 'transparent';
-                    document.body.style.cursor = ''; // 恢复默认光标
+                    resizer.style.background = 'transparent';
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                    
                     if (animationFrameId) {
                         cancelAnimationFrame(animationFrameId);
                         animationFrameId = null;
                     }
                 };
 
+                // 移除旧的监听器（如果存在）
+                resizer.removeEventListener('mousedown', mouseDownHandler);
+                // 添加新的监听器
                 resizer.addEventListener('mousedown', mouseDownHandler);
             },
 
@@ -1610,6 +1910,31 @@
                     });
                 }
 
+                // 知识切片区域的删除 / 确认事件委托
+                const chunksList = document.getElementById('chunks-list');
+                if (chunksList) {
+                    chunksList.addEventListener('click', (e) => {
+                        const deleteBtn = e.target.closest('.action-link.delete');
+                        const editBtn = e.target.closest('.action-link.edit');
+                        const confirmBtn = e.target.closest('.btn-confirm');
+                        const targetBtn = deleteBtn || editBtn || confirmBtn;
+                        if (!targetBtn) return;
+                        const chunkId = targetBtn.getAttribute('data-chunk-id');
+                        if (!chunkId) return;
+
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        if (deleteBtn) {
+                            KnowledgeOS.deleteChunk(chunkId);
+                        } else if (editBtn) {
+                            KnowledgeOS.editChunk(chunkId);
+                        } else if (confirmBtn && !confirmBtn.disabled && !confirmBtn.classList.contains('disabled')) {
+                            KnowledgeOS.confirmChunk(chunkId);
+                        }
+                    });
+                }
+
                 // 7. 绑定鼠标滚轮缩放（优化响应速度）
                 const pdfWrapper = document.getElementById('pdf-wrapper');
                 if (pdfWrapper) {
@@ -1653,13 +1978,275 @@
                     });
                 }
 
+                // 9. 绑定“自动生成知识库”按钮（调用大模型自动切片）
+                const btnAutoChunk = document.getElementById('btn-auto-chunk');
+                if (btnAutoChunk) {
+                    btnAutoChunk.addEventListener('click', async () => {
+                        if (!this.config.activeFileId) {
+                            alert('请先选择一个已经完成解析的文档');
+                            return;
+                        }
+                        const confirmRun = confirm('将使用大模型基于当前文档的解析结果自动生成知识切片，可能会消耗一定额度，是否继续？');
+                        if (!confirmRun) return;
+                        await this.autoChunkCurrentDocument();
+                    });
+                }
+
+                // 10. 绑定“创建新切片”按钮打开弹窗
+                const btnCreateManual = document.getElementById('btn-create-manual');
+                if (btnCreateManual) {
+                    btnCreateManual.addEventListener('click', () => {
+                        if (!this.config.activeFileId) {
+                            alert('请先选择一个文档');
+                            return;
+                        }
+                        this.createChunkManual();
+                    });
+                }
+
                 console.log("Knowledge OS V8.1 初始化完成.");
+            }
+        };
+
+        /** 设置自动生成知识切片按钮的加载状态 */
+        KnowledgeOS.setAutoChunkLoading = function(isLoading) {
+            this.config.isAutoChunking = !!isLoading;
+            const btn = document.getElementById('btn-auto-chunk');
+            if (btn) {
+                btn.disabled = !!isLoading;
+                btn.textContent = isLoading ? '⏳ 正在生成知识库…' : '✨ 自动生成知识库';
+            }
+        };
+
+        /** 删除知识切片 */
+        KnowledgeOS.deleteChunk = async function(chunkId) {
+            if (!chunkId) return;
+            if (!confirm('确定要删除这个知识切片吗？')) return;
+            try {
+                const response = await fetch(`${this.API_BASE}/api/rag/chunks/${chunkId}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.config.chunks = (this.config.chunks || []).filter(c => c.id !== chunkId);
+                    this.renderChunks();
+                    await this.loadDocuments(); // 同步刷新文档切片数量
+                } else {
+                    alert('删除失败：' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                console.error('删除知识切片失败:', e);
+                alert('删除失败，请查看控制台日志');
+            }
+        };
+
+        /** 打开编辑/创建知识切片弹窗 */
+        KnowledgeOS.openChunkModal = function(mode, chunk) {
+            const overlay = document.getElementById('chunk-modal-overlay');
+            const titleEl = document.getElementById('chunk-modal-title');
+            const contentEl = document.getElementById('chunk-modal-content');
+            const tagsEl = document.getElementById('chunk-modal-tags');
+            const pageEl = document.getElementById('chunk-modal-page');
+
+            this._chunkModalMode = mode; // 'edit' | 'create'
+            this._editingChunkId = chunk ? chunk.id : null;
+
+            if (mode === 'edit' && chunk) {
+                titleEl.textContent = '修改知识切片';
+                contentEl.value = chunk.content || '';
+                tagsEl.value = (chunk.tags || []).join(', ');
+                pageEl.value = chunk.source_page || this.config.currentPage || 1;
+            } else {
+                titleEl.textContent = '创建新知识切片';
+                contentEl.value = '';
+                tagsEl.value = '';
+                pageEl.value = this.config.currentPage || 1;
+            }
+
+            overlay.style.display = 'flex';
+            contentEl.focus();
+        };
+
+        KnowledgeOS.closeChunkModal = function() {
+            const overlay = document.getElementById('chunk-modal-overlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+            }
+            this._chunkModalMode = null;
+            this._editingChunkId = null;
+        };
+
+        /** 保存弹窗中的知识切片内容 */
+        KnowledgeOS.saveChunkFromModal = async function() {
+            const contentEl = document.getElementById('chunk-modal-content');
+            const tagsEl = document.getElementById('chunk-modal-tags');
+            const pageEl = document.getElementById('chunk-modal-page');
+
+            const content = (contentEl.value || '').trim();
+            const tagsRaw = (tagsEl.value || '').trim();
+            const page = parseInt(pageEl.value || '1', 10) || 1;
+
+            if (!content) {
+                alert('内容不能为空');
+                contentEl.focus();
+                return;
+            }
+
+            const tags = tagsRaw
+                ? tagsRaw.split(/[，,]/).map(t => t.trim()).filter(Boolean)
+                : [];
+
+            if (this._chunkModalMode === 'edit' && this._editingChunkId) {
+                // 调用更新接口
+                try {
+                    const resp = await fetch(`${this.API_BASE}/api/rag/chunks/${this._editingChunkId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            content,
+                            tags,
+                            source_page: page
+                        })
+                    });
+                    const data = await resp.json();
+                    if (data.success && data.chunk) {
+                        this.config.chunks = (this.config.chunks || []).map(c =>
+                            c.id === this._editingChunkId ? data.chunk : c
+                        );
+                        this.renderChunks();
+                        this.closeChunkModal();
+                    } else {
+                        alert('更新失败：' + (data.error || '未知错误'));
+                    }
+                } catch (e) {
+                    console.error('更新知识切片失败:', e);
+                    alert('更新失败，请查看控制台日志');
+                }
+            } else if (this._chunkModalMode === 'create') {
+                if (!this.config.activeFileId) {
+                    alert('请先选择一个文档');
+                    return;
+                }
+                try {
+                    const resp = await fetch(`${this.API_BASE}/api/rag/documents/${this.config.activeFileId}/chunks`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            content,
+                            tags,
+                            source_page: page
+                        })
+                    });
+                    const data = await resp.json();
+                    if (data.success && data.chunk) {
+                        this.config.chunks = (this.config.chunks || []).concat([data.chunk]);
+                        this.renderChunks();
+                        await this.loadDocuments(); // 更新切片数量
+                        this.closeChunkModal();
+                    } else {
+                        alert('创建失败：' + (data.error || '未知错误'));
+                    }
+                } catch (e) {
+                    console.error('创建知识切片失败:', e);
+                    alert('创建失败，请查看控制台日志');
+                }
+            }
+        };
+
+        /** 外部调用：编辑现有切片 */
+        KnowledgeOS.editChunk = function(chunkId) {
+            const chunk = (this.config.chunks || []).find(c => c.id === chunkId);
+            if (!chunk) {
+                alert('未找到要编辑的知识切片');
+                return;
+            }
+            this.openChunkModal('edit', chunk);
+        };
+
+        /** 外部调用：创建新切片 */
+        KnowledgeOS.createChunkManual = function() {
+            this.openChunkModal('create', null);
+        };
+
+        /** 确认知识切片入库 */
+        KnowledgeOS.confirmChunk = async function(chunkId) {
+            if (!chunkId) return;
+            try {
+                const response = await fetch(`${this.API_BASE}/api/rag/chunks/${chunkId}/confirm`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'confirmed' })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.config.chunks = (this.config.chunks || []).map(c => c.id === chunkId ? data.chunk : c);
+                    this.renderChunks();
+                } else {
+                    alert('确认失败：' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                console.error('确认知识切片失败:', e);
+                alert('确认失败，请查看控制台日志');
+            }
+        };
+
+        /** 使用大模型自动为当前文档生成知识切片 */
+        KnowledgeOS.autoChunkCurrentDocument = async function() {
+            if (!this.config.activeFileId) return;
+            try {
+                this.setAutoChunkLoading(true);
+                const response = await fetch(`${this.API_BASE}/api/rag/documents/${this.config.activeFileId}/auto-chunk`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chunker_type: 'semantic',
+                        chunk_size: 500,
+                        chunk_overlap: 50,
+                        min_chunk_size: 100
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    if (Array.isArray(data.chunks)) {
+                        this.config.chunks = (this.config.chunks || []).concat(data.chunks);
+                        this.renderChunks();
+                    } else {
+                        await this.loadChunksForActiveDocument();
+                    }
+                    await this.loadDocuments();
+                } else {
+                    alert('自动生成知识切片失败：' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                console.error('自动生成知识切片失败:', e);
+                alert('自动生成知识切片失败，请查看控制台日志');
+            } finally {
+                this.setAutoChunkLoading(false);
             }
         };
 
         // 页面加载完成后，执行初始化
         window.onload = function() {
             KnowledgeOS.init();
+
+            // 弹窗按钮绑定（关闭 / 取消 / 保存）
+            const overlay = document.getElementById('chunk-modal-overlay');
+            const closeBtn = document.getElementById('chunk-modal-close-btn');
+            const cancelBtn = document.getElementById('chunk-modal-cancel-btn');
+            const saveBtn = document.getElementById('chunk-modal-save-btn');
+
+            if (closeBtn) closeBtn.onclick = () => KnowledgeOS.closeChunkModal();
+            if (cancelBtn) cancelBtn.onclick = () => KnowledgeOS.closeChunkModal();
+            if (overlay) {
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay) {
+                        KnowledgeOS.closeChunkModal();
+                    }
+                });
+            }
+            if (saveBtn) {
+                saveBtn.onclick = () => KnowledgeOS.saveChunkFromModal();
+            }
         };
     </script>
 </body>

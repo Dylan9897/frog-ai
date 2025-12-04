@@ -269,11 +269,17 @@ class DocumentService:
     
     def update_chunks_count(self, document_id: str) -> bool:
         """
-        更新文档的切片数量
-        输入: document_id
-        输出: 是否成功
+        更新文档的切片数量（基于 chunks 表的实际记录数）
         """
-        # TODO: 统计并更新切片数量
-        pass
+        from ..database import DatabaseManager  # 避免循环导入警告
+
+        count = self.db.count_chunks(document_id)
+        document = self.db.get_document(document_id)
+        if not document:
+            return False
+
+        document.chunks_count = count
+        document.updated_at = datetime.now()
+        return self.db.update_document(document)
 
 
