@@ -76,23 +76,241 @@
         .resizer-y { height: 5px; cursor: row-resize; border-top: 1px solid transparent; }
         .resizer:hover { border-color: var(--brand-primary); }
 
-        .comparison-container { height: 55%; display: flex; background-color: var(--bg-universe); }
-        .panel { flex: 1; display: flex; flex-direction: column; background-color: var(--bg-universe); border-right: 1px solid var(--border-color); }
-        .panel:last-child { border-right: none; }
+        .comparison-container { 
+            height: 55%; 
+            display: flex; 
+            background-color: var(--bg-universe); 
+            width: 100%;
+            max-width: 100%;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+        .panel { 
+            display: flex; 
+            flex-direction: column; 
+            background-color: var(--bg-universe); 
+            border-right: 1px solid var(--border-color); 
+            min-width: 0;
+            min-height: 0;
+            overflow: hidden;
+            height: 100%;
+            box-sizing: border-box;
+        }
+        .panel:first-child { 
+            flex: 0 0 50%; 
+            min-width: 0;
+            max-width: 50%;
+            width: 50%;
+            box-sizing: border-box;
+        }
+        .panel:last-child { 
+            border-right: none; 
+            flex: 0 0 50%; 
+            min-width: 0;
+            max-width: 50%;
+            width: 50%;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
 
         .panel-header { height: 40px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; background: rgba(28, 29, 46, 0.5); border-bottom: 1px solid var(--border-color); font-size: 12px; color: var(--text-secondary); font-weight: 600; }
         .header-action { color: var(--brand-primary); cursor: pointer; }
 
-        .panel-body { flex: 1; position: relative; overflow: hidden; padding: 0; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s; }
-        .panel-body.scrollable { overflow: auto; align-items: flex-start; justify-content: flex-start; }
+        .panel-body { 
+            flex: 1; 
+            position: relative; 
+            overflow: hidden; 
+            padding: 0; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            transition: background-color 0.2s; 
+            min-height: 0; 
+        }
+        .panel-body.scrollable { 
+            overflow: auto; 
+            align-items: flex-start; 
+            justify-content: flex-start; 
+        }
         .panel-body.highlighted { background-color: rgba(0, 240, 255, 0.08); } /* 跳转高亮效果 */
 
         .pdf-image-mock { max-width: 100%; max-height: 100%; object-fit: contain; transition: all 0.3s; display: flex; align-items: center; justify-content: center; }
         .pdf-image-mock.zoomed { max-width: none; max-height: none; }
 
-        .text-stream-content { padding: 30px; overflow-y: auto; color: #d1d5db; font-size: 14px; line-height: 1.8; }
-        .text-stream-content h3 { color: var(--text-main); margin-top: 0; font-size: 18px; }
+        .text-stream-content { 
+            /* 右侧 AI 解析文本主容器：始终在可视区域内滚动显示，不再依赖浏览器整体缩放 */
+            padding: 18px 22px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            color: #d1d5db; 
+            font-size: 14px;
+            line-height: 1.8; 
+            width: 100%;
+            max-width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            display: block;
+            min-width: 0;
+            min-height: 0;
+            position: relative;
+            background: radial-gradient(circle at top left, rgba(112, 89, 251, 0.06), transparent 55%);
+        }
+
+        /* 解析区域内部：只做必要的防溢出处理，避免复杂 contain/white-space 导致在部分浏览器需要缩放才能看到内容 */
+        .text-stream-content * {
+            max-width: 100%;
+            box-sizing: border-box;
+            word-wrap: break-word;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        .text-stream-content .markdown-content {
+            max-width: 100%;
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+            padding: 0;
+            margin: 0;
+        }
+        .text-stream-content h1 {
+            font-size: clamp(22px, 2.5vw, 30px);
+        }
+        .text-stream-content h2 {
+            font-size: clamp(20px, 2.2vw, 26px);
+        }
+        .text-stream-content h3 { 
+            color: var(--text-main); 
+            margin-top: 0; 
+            font-size: clamp(18px, 2vw, 24px); 
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        .text-stream-content h4 {
+            font-size: clamp(17px, 1.8vw, 22px);
+        }
+        .text-stream-content h5 {
+            font-size: clamp(16px, 1.6vw, 20px);
+        }
+        .text-stream-content h6 {
+            font-size: clamp(15px, 1.4vw, 18px);
+        }
+        .text-stream-content h1, .text-stream-content h2, .text-stream-content h3, 
+        .text-stream-content h4, .text-stream-content h5, .text-stream-content h6 {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            max-width: 100%;
+            box-sizing: border-box;
+            margin: 0.5em 0;
+            line-height: 1.4;
+        }
+        .text-stream-content p {
+            max-width: 100%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            box-sizing: border-box;
+            margin: 0.5em 0;
+            line-height: 1.6;
+            font-size: clamp(14px, 1.5vw, 18px);
+        }
+        .text-stream-content ul, .text-stream-content ol {
+            max-width: 100%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            box-sizing: border-box;
+            margin: 0.5em 0;
+            padding-left: clamp(1em, 2vw, 1.5em);
+            font-size: clamp(14px, 1.5vw, 18px);
+        }
+        .text-stream-content li {
+            max-width: 100%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            box-sizing: border-box;
+            margin: 0.25em 0;
+            line-height: 1.6;
+            font-size: clamp(14px, 1.5vw, 18px);
+        }
+        .text-stream-content div {
+            max-width: 100%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            box-sizing: border-box;
+            font-size: clamp(14px, 1.5vw, 18px);
+        }
+        .text-stream-content code {
+            font-size: clamp(13px, 1.3vw, 16px);
+        }
+        .text-stream-content pre {
+            font-size: clamp(13px, 1.3vw, 16px);
+        }
+        /* 特别处理 pre / code，保证可读又不撑爆容器 */
+        .text-stream-content pre,
+        .text-stream-content code {
+            max-width: 100%;
+            width: 100%;
+            box-sizing: border-box;
+            word-wrap: break-word;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            overflow-x: hidden;
+            white-space: pre-wrap;
+        }
         .highlight-text { color: var(--brand-cyan); border-bottom: 1px dashed var(--brand-cyan); padding-bottom: 1px; }
+
+        /* 响应式字体大小优化 - 基于视口和容器宽度 */
+        @media (max-width: 1200px) {
+            .text-stream-content {
+                font-size: clamp(13px, 1.4vw, 17px) !important;
+            }
+            .text-stream-content p,
+            .text-stream-content li,
+            .text-stream-content div {
+                font-size: clamp(13px, 1.4vw, 17px) !important;
+            }
+            .text-stream-content h1 { font-size: clamp(20px, 2.3vw, 28px) !important; }
+            .text-stream-content h2 { font-size: clamp(18px, 2.1vw, 24px) !important; }
+            .text-stream-content h3 { font-size: clamp(16px, 1.9vw, 22px) !important; }
+            .text-stream-content h4 { font-size: clamp(15px, 1.7vw, 20px) !important; }
+            .text-stream-content h5 { font-size: clamp(14px, 1.6vw, 19px) !important; }
+            .text-stream-content h6 { font-size: clamp(13px, 1.5vw, 17px) !important; }
+        }
+        
+        @media (max-width: 900px) {
+            .text-stream-content {
+                font-size: clamp(12px, 1.3vw, 16px) !important;
+            }
+            .text-stream-content p,
+            .text-stream-content li,
+            .text-stream-content div {
+                font-size: clamp(12px, 1.3vw, 16px) !important;
+            }
+            .text-stream-content h1 { font-size: clamp(18px, 2.1vw, 26px) !important; }
+            .text-stream-content h2 { font-size: clamp(16px, 1.9vw, 22px) !important; }
+            .text-stream-content h3 { font-size: clamp(15px, 1.8vw, 20px) !important; }
+            .text-stream-content h4 { font-size: clamp(14px, 1.7vw, 19px) !important; }
+            .text-stream-content h5 { font-size: clamp(13px, 1.6vw, 18px) !important; }
+            .text-stream-content h6 { font-size: clamp(12px, 1.5vw, 16px) !important; }
+        }
+        
+        @media (min-width: 1600px) {
+            .text-stream-content {
+                font-size: clamp(15px, 1.6vw, 20px) !important;
+            }
+            .text-stream-content p,
+            .text-stream-content li,
+            .text-stream-content div {
+                font-size: clamp(15px, 1.6vw, 20px) !important;
+            }
+            .text-stream-content h1 { font-size: clamp(24px, 2.6vw, 32px) !important; }
+            .text-stream-content h2 { font-size: clamp(22px, 2.4vw, 28px) !important; }
+            .text-stream-content h3 { font-size: clamp(20px, 2.2vw, 26px) !important; }
+            .text-stream-content h4 { font-size: clamp(19px, 2.0vw, 24px) !important; }
+            .text-stream-content h5 { font-size: clamp(18px, 1.9vw, 22px) !important; }
+            .text-stream-content h6 { font-size: clamp(17px, 1.8vw, 20px) !important; }
+        }
 
         .chunks-container {
             flex-grow: 1;
@@ -140,7 +358,7 @@
                 + 导入新文档<br>
                 <span style="font-size: 11px; opacity: 0.7;">或拖拽文件到此处</span>
             </div>
-            <input type="file" id="file-input" style="display: none;" multiple accept=".pdf,.docx,.xlsx,.xls,.txt,.md,.json">
+            <input type="file" id="file-input" style="display: none;" multiple accept=".pdf,.doc,.docx,.xlsx,.xls,.txt,.md,.json">
             <input type="text" id="file-search" class="search-box" placeholder="🔍 搜索文档..." autocomplete="off">
             <div class="file-list-header">
                 <span>知识源列表 (<span id="file-count">0</span>)</span>
@@ -181,7 +399,10 @@
                         <span>解析文本流 (AI 清洗)</span>
                         <span style="color: var(--brand-cyan)">● 已完成清洗</span>
                     </div>
-                    <div class="text-stream-content" id="parsed-text-content"></div>
+                    <!-- 右侧解析结果使用独立可滚动容器，避免整体页面缩放才能看到内容 -->
+                    <div class="panel-body scrollable">
+                        <div class="text-stream-content" id="parsed-text-content"></div>
+                    </div>
                 </div>
             </section>
 
@@ -260,14 +481,14 @@
                     <div class="file-item ${isActive ? 'active' : ''} ${!isVisible ? 'hidden' : ''}">
                         <div class="file-item-content" onclick="KnowledgeOS.setActiveFile('${file.id}')">
                             <span class="file-name">${this.highlightSearchKeyword(file.name, searchKeyword)}</span>
-                            <div class="file-meta">
+                        <div class="file-meta">
                                 <span style="color: ${file.status_color || 'var(--text-secondary)'}; display: flex; align-items: center;">
                                     ${file.status === 'processing' ? '<span class="processing-spinner"></span>' : `<span class="status-dot" style="background:${file.status_color || 'var(--text-secondary)'}"></span>`}
                                     ${this.getStatusText(file.status)}
-                                </span>
-                                <span>${file.chunks_count || 0} 切片</span>
-                            </div>
+                            </span>
+                            <span>${file.chunks_count || 0} 切片</span>
                         </div>
+                    </div>
                         <button class="action-link delete" data-doc-id="${file.id}" data-doc-name="${file.name.replace(/"/g, '&quot;')}" title="删除文档" style="flex-shrink: 0;">🗑</button>
                     </div>
                 `;
@@ -344,8 +565,9 @@
                     if (data.success) {
                         // 立即刷新文档列表，显示新上传的文件（状态为 processing）
                         await this.loadDocuments();
-                        // 如果是 PDF，启动后台处理状态轮询
-                        if (file.name.toLowerCase().endsWith('.pdf')) {
+                        // 启动后台处理状态轮询（所有支持解析的文件类型）
+                        const ext = file.name.toLowerCase().split('.').pop();
+                        if (['pdf', 'doc', 'docx', 'txt', 'md', 'json', 'xlsx', 'xls'].includes(ext)) {
                             this.pollDocumentStatus(data.document.id);
                         }
                         return { success: true, filename: file.name, document: data.document };
@@ -360,8 +582,9 @@
             
             /** 轮询文档处理状态 */
             pollDocumentStatus: function(documentId) {
-                const maxAttempts = 60; // 最多轮询60次（5分钟）
+                const maxAttempts = 120; // 最多轮询120次（10分钟）
                 let attempts = 0;
+                let hasRefreshed = false; // 记录是否已经刷新过
                 
                 const poll = async () => {
                     if (attempts >= maxAttempts) {
@@ -370,6 +593,33 @@
                     }
                     
                     try {
+                        // 每次轮询都检查解析文本是否已存在（即使状态还是 processing）
+                        if (this.config.activeFileId === documentId && !hasRefreshed) {
+                            try {
+                                const activeFile = this.config.files.find(f => f.id === documentId);
+                                if (activeFile) {
+                                    // 根据文件类型确定要检查的页码
+                                    const pageToCheck = activeFile.file_type === 'pdf' ? (this.config.currentPage || 1) : '';
+                                    const parsedUrl = `${this.API_BASE}/api/rag/documents/${documentId}/parsed-text?page=${pageToCheck}`;
+                                    const parsedResponse = await fetch(parsedUrl);
+                                    const parsedData = await parsedResponse.json();
+                                    
+                                    if (parsedData.success && parsedData.content) {
+                                        console.log('[轮询] ✅ 检测到解析文本已存在，立即刷新整个视图');
+                                        hasRefreshed = true;
+                                        // 先更新文件列表，确保状态同步
+                                        await this.loadDocuments();
+                                        // 立即刷新整个视图（包括PDF和解析文本）
+                                        await this.renderPDFAndParsedText(this.config.currentPage || 1);
+                                        // 继续轮询以更新状态
+                                    }
+                                }
+                            } catch (e) {
+                                // 忽略错误，继续正常轮询
+                                console.error('[轮询] 检查解析文本失败:', e);
+                            }
+                        }
+                        
                         const response = await fetch(`${this.API_BASE}/api/rag/documents?t=${Date.now()}`);
                         const data = await response.json();
                         if (data.success) {
@@ -378,13 +628,31 @@
                                 // 更新文件状态
                                 const fileIndex = this.config.files.findIndex(f => f.id === documentId);
                                 if (fileIndex !== -1) {
+                                    const oldStatus = this.config.files[fileIndex].status;
                                     this.config.files[fileIndex] = doc;
                                     this.renderSidebar();
                                     
-                                    // 如果文档已完成处理，停止轮询
+                                    // 如果文档已完成处理，停止轮询并刷新界面
                                     if (doc.status === 'completed' || doc.status === 'failed') {
                                         console.log(`[轮询] 文档 ${documentId} 处理完成，状态: ${doc.status}`);
+                                        
+                                        // 如果当前正在查看这个文档，自动刷新整个视图
+                                        if (this.config.activeFileId === documentId) {
+                                            console.log('[轮询] 文档处理完成，刷新整个视图');
+                                            await this.renderPDFAndParsedText(this.config.currentPage || 1);
+                                        }
+                                        
+                                        // 重新加载文档列表以获取最新状态
+                                        await this.loadDocuments();
                                         return;
+                                    }
+                                    
+                                    // 如果状态从 processing 变为其他状态，也刷新
+                                    if (oldStatus === 'processing' && doc.status !== 'processing') {
+                                        if (this.config.activeFileId === documentId) {
+                                            console.log('[轮询] 状态变化，刷新视图');
+                                            await this.renderPDFAndParsedText(this.config.currentPage || 1);
+                                        }
                                     }
                                 }
                             }
@@ -394,8 +662,8 @@
                     }
                     
                     attempts++;
-                    // 每5秒轮询一次
-                    setTimeout(poll, 5000);
+                    // 每1秒轮询一次（加快响应速度，解析完成后立即检测）
+                    setTimeout(poll, 1000);
                 };
                 
                 poll();
@@ -516,6 +784,390 @@
                 `).join('');
             },
 
+            /** 加载解析文本（Markdown） */
+            loadParsedText: async function(page) {
+                const parsedTextEl = document.getElementById('parsed-text-content');
+                if (!this.config.activeFileId) {
+                    parsedTextEl.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">请选择一个文档</div>';
+                    return;
+                }
+                
+                const activeFile = this.config.files.find(f => f.id === this.config.activeFileId);
+                if (!activeFile) {
+                    parsedTextEl.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">文档不存在</div>';
+                    return;
+                }
+                
+                // 如果文档正在处理中，先尝试加载解析文本（可能已经解析完成但状态还没更新）
+                if (activeFile.status === 'processing') {
+                    // 先尝试加载解析文本，如果存在就显示，不存在才显示处理状态
+                    try {
+                        const pageToCheck = activeFile.file_type === 'pdf' ? (page || 1) : '';
+                        const url = `${this.API_BASE}/api/rag/documents/${this.config.activeFileId}/parsed-text?page=${pageToCheck}`;
+                        const response = await fetch(url);
+                        const data = await response.json();
+                        
+                        if (data.success && data.content) {
+                            // 解析文本已存在，直接显示（即使状态还是 processing）
+                            console.log('[loadParsedText] 检测到解析文本已存在，直接显示');
+                            this.renderMarkdown(parsedTextEl, data.content);
+                            return;
+                        }
+                    } catch (e) {
+                        // 忽略错误，继续显示处理状态
+                        console.error('[loadParsedText] 检查解析文本失败:', e);
+                    }
+                    
+                    // 解析文本不存在，显示处理状态
+                    parsedTextEl.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);"><div class="processing-spinner" style="width: 40px; height: 40px; border-width: 4px; margin: 0 auto 16px;"></div><div>正在解析文本，请稍候...</div></div>';
+                    return;
+                }
+                
+                // 如果是 PDF，优先从数据库加载，如果没有则使用流式输出
+                if (activeFile.file_type === 'pdf') {
+                    const pageNum = page || 1;
+                    console.log(`[loadParsedText] 尝试从数据库加载第 ${pageNum} 页的解析文本`);
+                    
+                    // 先尝试从数据库加载
+                    try {
+                        const url = `${this.API_BASE}/api/rag/documents/${this.config.activeFileId}/parsed-text?page=${pageNum}`;
+                        const response = await fetch(url);
+                        const data = await response.json();
+                        
+                        if (data.success && data.content) {
+                            // 数据库中有缓存，直接显示
+                            console.log(`[loadParsedText] ✅ 从数据库加载第 ${pageNum} 页的解析文本成功`);
+                            this.renderMarkdown(parsedTextEl, data.content);
+                            return;
+                        } else {
+                            console.log(`[loadParsedText] ⚠️ 数据库中第 ${pageNum} 页的解析文本不存在`);
+                        }
+                    } catch (error) {
+                        console.error(`[loadParsedText] ❌ 从数据库加载第 ${pageNum} 页的解析文本失败:`, error);
+                    }
+                    
+                    // 如果数据库中没有，使用流式输出（实时解析或重新解析）
+                    console.log(`[loadParsedText] 数据库中第 ${pageNum} 页的解析文本不存在，使用流式输出`);
+                    await this.loadParsedTextStream(pageNum);
+                } else {
+                    // 其他文件（docx, txt, excel, md等），使用本地规则解析，从数据库加载
+                    console.log(`[loadParsedText] 尝试从数据库加载非PDF文件的解析文本（本地规则解析）`);
+                    try {
+                        const url = `${this.API_BASE}/api/rag/documents/${this.config.activeFileId}/parsed-text?page=${page || ''}`;
+                        const response = await fetch(url);
+                        const data = await response.json();
+                        
+                        if (data.success && data.content) {
+                            // 数据库中有解析结果，直接显示
+                            console.log(`[loadParsedText] ✅ 从数据库加载非PDF文件的解析文本成功（本地规则解析）`);
+                            this.renderMarkdown(parsedTextEl, data.content);
+                        } else {
+                            // 数据库中没有，检查文档状态
+                            if (activeFile.status === 'processing') {
+                                // 正在处理中，显示处理状态
+                                console.log(`[loadParsedText] 非PDF文件正在使用本地规则解析中，显示处理状态`);
+                                parsedTextEl.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);"><div class="processing-spinner" style="width: 40px; height: 40px; border-width: 4px; margin: 0 auto 16px;"></div><div>正在使用本地规则解析文本，请稍候...</div></div>';
+                            } else {
+                                // 已完成但数据库中没有，可能是解析失败或还未解析
+                                console.log(`[loadParsedText] ⚠️ 非PDF文件的解析文本不存在，文档状态: ${activeFile.status}`);
+                                parsedTextEl.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">解析文本未找到，可能正在处理中...</div>';
+                            }
+                        }
+                    } catch (error) {
+                        console.error('加载解析文本失败:', error);
+                        parsedTextEl.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">加载解析文本失败</div>';
+                    }
+                }
+            },
+            
+            /** 流式加载解析文本（PDF） */
+            loadParsedTextStream: async function(page) {
+                const parsedTextEl = document.getElementById('parsed-text-content');
+                
+                // 显示加载状态
+                parsedTextEl.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);"><div class="processing-spinner" style="width: 40px; height: 40px; border-width: 4px; margin: 0 auto 16px;"></div><div>正在解析文本，请稍候...</div></div>';
+                
+                try {
+                    const url = `${this.API_BASE}/api/rag/documents/${this.config.activeFileId}/parsed-text/stream?page=${page || 1}`;
+                    const eventSource = new EventSource(url);
+                    
+                    let content = '';
+                    const contentContainer = document.createElement('div');
+                    contentContainer.className = 'markdown-content';
+                    // 强制设置样式，防止容器扩展
+                    contentContainer.style.maxWidth = '100%';
+                    contentContainer.style.width = '100%';
+                    contentContainer.style.wordWrap = 'break-word';
+                    contentContainer.style.wordBreak = 'break-word';
+                    contentContainer.style.overflowWrap = 'anywhere';
+                    contentContainer.style.overflowX = 'hidden';
+                    contentContainer.style.boxSizing = 'border-box';
+                    parsedTextEl.innerHTML = '';
+                    parsedTextEl.appendChild(contentContainer);
+                    
+                    // 确保容器本身也有固定宽度
+                    parsedTextEl.style.maxWidth = '100%';
+                    parsedTextEl.style.width = '100%';
+                    parsedTextEl.style.overflowX = 'hidden';
+                    
+                    // 使用防抖来减少DOM更新频率，避免界面闪烁
+                    let updateTimer = null;
+                    const updateContent = () => {
+                        if (updateTimer) {
+                            clearTimeout(updateTimer);
+                        }
+                        updateTimer = setTimeout(() => {
+                            // 保存当前滚动位置
+                            const scrollTop = parsedTextEl.scrollTop;
+                            const scrollHeight = parsedTextEl.scrollHeight;
+                            const isScrolledToBottom = scrollTop + parsedTextEl.clientHeight >= scrollHeight - 10;
+                            
+                            // 确保容器宽度不变
+                            const containerWidth = parsedTextEl.offsetWidth;
+                            
+                            // 渲染内容
+                            this.renderMarkdown(contentContainer, content);
+                            
+                            // 强制保持容器宽度
+                            if (parsedTextEl.offsetWidth !== containerWidth) {
+                                parsedTextEl.style.width = containerWidth + 'px';
+                                parsedTextEl.style.maxWidth = containerWidth + 'px';
+                            }
+                            
+                            // 确保内容容器宽度不变
+                            contentContainer.style.maxWidth = '100%';
+                            contentContainer.style.width = '100%';
+                            contentContainer.style.overflowX = 'hidden';
+                            
+                            // 如果之前滚动到底部，自动滚动到底部（跟随新内容）
+                            if (isScrolledToBottom) {
+                                parsedTextEl.scrollTop = parsedTextEl.scrollHeight;
+                            }
+                        }, 100); // 每100ms最多更新一次
+                    };
+                    
+                    eventSource.onmessage = (event) => {
+                        // 清理接收到的数据
+                        let chunk = event.data || '';
+                        
+                        // 移除 markdown 前缀
+                        chunk = chunk.replace(/^markdown\n?/i, '').replace(/^markdown/i, '');
+                        
+                        // 移除完整的JSON对象（如 {'text': '...'} 或 {"text": "..."}）
+                        chunk = chunk.replace(/\{'text':\s*'([^']*)'\}/g, '$1');
+                        chunk = chunk.replace(/\{"text":\s*"([^"]*)"\}/g, '$1');
+                        chunk = chunk.replace(/\{'text':\s*([^}]*)\}/g, '$1');
+                        chunk = chunk.replace(/\{"text":\s*([^}]*)\}/g, '$1');
+                        
+                        // 移除JSON结构片段（如 }{'text': ' 或 }{'text': 等）
+                        chunk = chunk.replace(/\}\{'text':\s*['"]?/g, '');
+                        chunk = chunk.replace(/\}\{"text":\s*['"]?/g, '');
+                        chunk = chunk.replace(/\}\s*\{\s*['"]?text['"]?\s*:\s*['"]?/g, '');
+                        
+                        // 移除残留的JSON结构（如 'text': ' 或 "text": "）
+                        chunk = chunk.replace(/['"]?text['"]?\s*:\s*['"]?/g, '');
+                        
+                        // 移除残留的大括号和引号（如果它们单独出现）
+                        chunk = chunk.replace(/^[{}'"\s]+/, '');
+                        chunk = chunk.replace(/[{}'"\s]+$/, '');
+                        
+                        // 移除LaTeX数学公式标记
+                        chunk = chunk.replace(/\$\$[^$]*\$\$/g, '');
+                        chunk = chunk.replace(/\$[^$]*\$/g, '');
+                        
+                        // 移除LaTeX命令
+                        chunk = chunk.replace(/\^\{[^}]*\}/g, '');
+                        chunk = chunk.replace(/\\[a-zA-Z]+\*?/g, '');
+                        chunk = chunk.replace(/\\[{}]/g, '');
+                        
+                        // 处理转义字符：将 \n 转换为实际换行
+                        chunk = chunk.replace(/\\n/g, '\n');
+                        
+                        // 保留换行符，不要移除
+                        // 只合并过多的连续换行（保留最多2个）
+                        chunk = chunk.replace(/\n{3,}/g, '\n\n');
+                        
+                        // 不要移除开头的换行符，它们可能是段落分隔
+                        // 只在第一个chunk时移除开头的换行
+                        if (content === '' && chunk.startsWith('\n')) {
+                            chunk = chunk.replace(/^\n+/, '');
+                        }
+                        
+                        // 只要有内容（包括换行符），就添加
+                        if (chunk) {
+                            content += chunk;
+                            // 使用防抖更新，减少闪烁
+                            updateContent();
+                        }
+                    };
+                    
+                    eventSource.onerror = (error) => {
+                        eventSource.close();
+                        // 清除定时器，立即更新最终内容
+                        if (updateTimer) {
+                            clearTimeout(updateTimer);
+                        }
+                        if (content) {
+                            // 如果已经有内容，保持显示
+                            this.renderMarkdown(contentContainer, content);
+                            // 滚动到底部
+                            parsedTextEl.scrollTop = parsedTextEl.scrollHeight;
+                        } else {
+                            // 尝试从数据库加载已解析的文本
+                            this.loadParsedTextFromDB(page);
+                        }
+                    };
+                } catch (error) {
+                    console.error('流式加载失败:', error);
+                    // 降级到普通加载
+                    this.loadParsedTextFromDB(page);
+                }
+            },
+            
+            /** 从数据库加载已解析的文本 */
+            loadParsedTextFromDB: async function(page) {
+                const parsedTextEl = document.getElementById('parsed-text-content');
+                try {
+                    const url = `${this.API_BASE}/api/rag/documents/${this.config.activeFileId}/parsed-text?page=${page || ''}`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    
+                    if (data.success && data.content) {
+                        this.renderMarkdown(parsedTextEl, data.content);
+                    } else {
+                        parsedTextEl.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">解析文本未找到</div>';
+                    }
+                } catch (error) {
+                    console.error('加载解析文本失败:', error);
+                    parsedTextEl.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">加载解析文本失败</div>';
+                }
+            },
+            
+            /** 渲染 Markdown 文本 */
+            renderMarkdown: function(container, markdownText) {
+                if (!markdownText) {
+                    container.innerHTML = '';
+                    return;
+                }
+                
+                // 简单的 Markdown 渲染（可以后续集成 marked.js 等库）
+                let html = markdownText;
+                
+                // 先处理代码块（避免代码块内的内容被其他规则处理）
+                const codeBlocks = [];
+                html = html.replace(/```([\s\S]*?)```/g, (match, code) => {
+                    const id = `CODE_BLOCK_${codeBlocks.length}`;
+                    const codeStyle = 'style="max-width: 100% !important; width: 100% !important; word-wrap: break-word !important; word-break: break-all !important; overflow-wrap: anywhere !important; overflow-x: hidden !important; white-space: pre-wrap !important; box-sizing: border-box !important; display: block !important;"';
+                    codeBlocks.push(`<pre ${codeStyle}><code ${codeStyle}>${code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`);
+                    return id;
+                });
+                
+                // 处理行内代码
+                const codeStyle = 'style="max-width: 100% !important; word-wrap: break-word !important; word-break: break-all !important; overflow-wrap: anywhere !important; white-space: pre-wrap !important; box-sizing: border-box !important;"';
+                html = html.replace(/`([^`]+)`/g, `<code ${codeStyle}>$1</code>`);
+                
+                // 转义 HTML（但保留已处理的代码块标记）
+                html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                
+                // 恢复代码块
+                codeBlocks.forEach((codeBlock, index) => {
+                    html = html.replace(`CODE_BLOCK_${index}`, codeBlock);
+                });
+                
+                // 按行处理
+                const lines = html.split('\n');
+                const processedLines = [];
+                let inList = false;
+                let listItems = [];
+                
+                for (let i = 0; i < lines.length; i++) {
+                    let line = lines[i];
+                    const trimmed = line.trim();
+                    
+                    // 标题
+                    if (trimmed.match(/^###\s+(.+)$/)) {
+                        if (inList) {
+                            processedLines.push(`<ul>${listItems.join('')}</ul>`);
+                            listItems = [];
+                            inList = false;
+                        }
+                        const h3Style = 'style="font-size: clamp(18px, 2vw, 24px); max-width: 100%; word-wrap: break-word; word-break: break-word; overflow-wrap: anywhere; white-space: normal; overflow-x: hidden; box-sizing: border-box;"';
+                        processedLines.push(`<h3 ${h3Style}>${trimmed.replace(/^###\s+/, '')}</h3>`);
+                    } else if (trimmed.match(/^##\s+(.+)$/)) {
+                        if (inList) {
+                            processedLines.push(`<ul>${listItems.join('')}</ul>`);
+                            listItems = [];
+                            inList = false;
+                        }
+                        const h2Style = 'style="font-size: clamp(20px, 2.2vw, 26px); max-width: 100%; word-wrap: break-word; word-break: break-word; overflow-wrap: anywhere; white-space: normal; overflow-x: hidden; box-sizing: border-box;"';
+                        processedLines.push(`<h2 ${h2Style}>${trimmed.replace(/^##\s+/, '')}</h2>`);
+                    } else if (trimmed.match(/^#\s+(.+)$/)) {
+                        if (inList) {
+                            processedLines.push(`<ul>${listItems.join('')}</ul>`);
+                            listItems = [];
+                            inList = false;
+                        }
+                        const h1Style = 'style="font-size: clamp(22px, 2.5vw, 30px); max-width: 100%; word-wrap: break-word; word-break: break-word; overflow-wrap: anywhere; white-space: normal; overflow-x: hidden; box-sizing: border-box;"';
+                        processedLines.push(`<h1 ${h1Style}>${trimmed.replace(/^#\s+/, '')}</h1>`);
+                    } 
+                    // 列表项
+                    else if (trimmed.match(/^[\*\-+]\s+(.+)$/)) {
+                        if (!inList) {
+                            inList = true;
+                        }
+                        const content = trimmed.replace(/^[\*\-+]\s+/, '');
+                        const liStyle = 'style="font-size: clamp(14px, 1.5vw, 18px); max-width: 100%; word-wrap: break-word; word-break: break-word; overflow-wrap: anywhere; white-space: normal; overflow-x: hidden; box-sizing: border-box;"';
+                        listItems.push(`<li ${liStyle}>${content}</li>`);
+                    }
+                    // 空行
+                    else if (!trimmed) {
+                        if (inList) {
+                            processedLines.push(`<ul>${listItems.join('')}</ul>`);
+                            listItems = [];
+                            inList = false;
+                        }
+                        processedLines.push('<br>'); // 保留空行作为段落分隔
+                    }
+                    // 普通文本行
+                    else {
+                        if (inList) {
+                            processedLines.push(`<ul>${listItems.join('')}</ul>`);
+                            listItems = [];
+                            inList = false;
+                        }
+                        // 处理粗体和斜体
+                        line = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                        line = line.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                        // 处理链接
+                        line = line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+                        const pStyle = 'style="font-size: clamp(14px, 1.5vw, 18px); max-width: 100%; word-wrap: break-word; word-break: break-word; overflow-wrap: anywhere; white-space: normal; overflow-x: hidden; box-sizing: border-box;"';
+                        processedLines.push(`<p ${pStyle}>${line}</p>`);
+                    }
+                }
+                
+                // 处理剩余的列表
+                if (inList && listItems.length > 0) {
+                    const ulStyle = 'style="font-size: clamp(14px, 1.5vw, 18px); max-width: 100%; word-wrap: break-word; word-break: break-word; overflow-wrap: anywhere; white-space: normal; overflow-x: hidden; box-sizing: border-box; padding-left: clamp(1em, 2vw, 1.5em);"';
+                    processedLines.push(`<ul ${ulStyle}>${listItems.join('')}</ul>`);
+                }
+                
+                container.innerHTML = processedLines.join('');
+                
+                // 强制所有子元素都有正确的样式
+                const allElements = container.querySelectorAll('*');
+                allElements.forEach(el => {
+                    el.style.maxWidth = '100%';
+                    el.style.boxSizing = 'border-box';
+                    el.style.wordBreak = 'break-all';
+                    el.style.overflowWrap = 'anywhere';
+                    el.style.overflowX = 'hidden';
+                    if (el.tagName === 'PRE' || el.tagName === 'CODE') {
+                        el.style.whiteSpace = 'pre-wrap';
+                        el.style.width = '100%';
+                    }
+                });
+            },
+
             /** 渲染 PDF/解析文本内容 */
             renderPDFAndParsedText: async function(page = 1) {
                 const pdfContent = document.getElementById('pdf-content');
@@ -631,13 +1283,8 @@
                     // 绑定图片拖拽功能
                     this.setupImageDrag(img);
 
-                    // 模拟解析文本渲染（后续可以替换为真实数据）
-                    parsedText.innerHTML = `
-                        <h3>第 ${page} 页内容概要</h3>
-                        <p style="opacity: 0.6; font-size: 12px; margin-bottom: 20px;">[系统提示] 成功加载 ${this.config.activeFileId} 的第 ${page} 页内容。</p>
-                        <p>这是从文档中解析出的核心文本。具体切片来自这里... </p>
-                        <p>（此处模拟该页面的解析内容）</p>
-                    `;
+                    // 加载解析文本（Markdown）- 优先从数据库缓存加载
+                    await this.loadParsedText(page);
                 } catch (error) {
                     console.error('加载页面失败:', error);
                     pdfContent.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">加载页面失败</div>';
@@ -910,7 +1557,7 @@
                     importZone.classList.remove('drag-over');
                     
                     const files = Array.from(e.dataTransfer.files);
-                    const allowedExts = ['.pdf', '.docx', '.xlsx', '.xls', '.txt', '.md', '.json'];
+                    const allowedExts = ['.pdf', '.doc', '.docx', '.xlsx', '.xls', '.txt', '.md', '.json'];
                     const validFiles = files.filter(file => {
                         const ext = '.' + file.name.split('.').pop().toLowerCase();
                         return allowedExts.includes(ext);
@@ -980,6 +1627,30 @@
                             this.zoomImage(delta);
                         }
                     }, { passive: false });
+                }
+
+                // 8. 响应式字体大小调整 - 监听窗口和容器大小变化
+                const textContent = document.getElementById('parsed-text-content');
+                if (textContent && window.ResizeObserver) {
+                    // 使用 ResizeObserver 监听容器大小变化
+                    const resizeObserver = new ResizeObserver((entries) => {
+                        // CSS clamp() 和媒体查询已经处理了大部分响应式需求
+                        // 这里可以添加额外的动态调整逻辑（如果需要）
+                        // 目前 CSS 已经足够，这里保留接口以便未来扩展
+                    });
+                    resizeObserver.observe(textContent);
+                    
+                    // 监听窗口大小变化，确保媒体查询生效
+                    let resizeTimeout = null;
+                    window.addEventListener('resize', () => {
+                        if (resizeTimeout) {
+                            clearTimeout(resizeTimeout);
+                        }
+                        resizeTimeout = setTimeout(() => {
+                            // 触发重新计算样式（CSS 会自动处理）
+                            // 这里可以添加额外的调整逻辑
+                        }, 100);
+                    });
                 }
 
                 console.log("Knowledge OS V8.1 初始化完成.");

@@ -91,6 +91,20 @@ class DatabaseManager:
             )
         ''')
         
+        # 创建 parsed_text 表（存储解析后的文本）
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS parsed_text (
+                id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL,
+                page_number INTEGER,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+                UNIQUE(document_id, page_number)
+            )
+        ''')
+        
         # 创建索引
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id)')
@@ -98,6 +112,8 @@ class DatabaseManager:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_document_id ON parsing_tasks(document_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_pages_document_id ON document_pages(document_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_pages_doc_page ON document_pages(document_id, page_number)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_parsed_text_document_id ON parsed_text(document_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_parsed_text_doc_page ON parsed_text(document_id, page_number)')
         
         conn.commit()
         conn.close()
@@ -392,4 +408,89 @@ class DatabaseManager:
         """更新任务"""
         # TODO: 实现任务更新
         pass
+    
+    # ==================== ParsedText 操作 ====================
+    
+    def create_parsed_text(self, document_id: str, content: str, page_number: Optional[int] = None) -> bool:
+        """创建或更新解析文本"""
+        import uuid
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            parsed_id = f"parsed-{uuid.uuid4().hex[:12]}"
+            cursor.execute('''
+                INSERT OR REPLACE INTO parsed_text 
+                (id, document_id, page_number, content, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (
+                parsed_id, document_id, page_number, content, datetime.now()
+            ))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"保存解析文本失败: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+    
+    def get_parsed_text(self, document_id: str, page_number: Optional[int] = None) -> Optional[str]:
+        """获取解析文本"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            if page_number is not None:
+                cursor.execute('''
+                    SELECT content FROM parsed_text 
+                    WHERE document_id = ? AND page_number = ?
+                    ORDER BY updated_at DESC LIMIT 1
+                ''', (document_id, page_number))
+            else:
+                # 获取所有页面的文本，按页码排序
+                cursor.execute('''
+                    SELECT content FROM parsed_text 
+                    WHERE document_id = ?
+                    ORDER BY page_number ASC
+                ''', (document_id,))
+            
+            rows = cursor.fetchall()
+            if rows:
+                if page_number is not None:
+                    return rows[0]['content']
+                else:
+                    # 合并所有页面的文本
+                    return "\n\n".join([row['content'] for row in rows])
+            return None
+        finally:
+            conn.close()
+    
+    def list_parsed_text_pages(self, document_id: str) -> List[Dict[str, Any]]:
+        """获取文档的所有解析文本页面"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                SELECT page_number, content, updated_at 
+                FROM parsed_text 
+                WHERE document_id = ?
+                ORDER BY page_number ASC
+            ''', (document_id,))
+            return [dict(row) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+    
+    def delete_parsed_text(self, document_id: str) -> bool:
+        """删除文档的所有解析文本"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('DELETE FROM parsed_text WHERE document_id = ?', (document_id,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"删除解析文本失败: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
 

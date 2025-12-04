@@ -21,7 +21,7 @@ RAG_CONFIG = {
         "pages_dir": str(DATA_DIR / "pages")  # 页面图片存储目录
     },
     "parsing": {
-        "supported_formats": ["pdf", "docx", "xlsx", "xls", "txt", "md", "json"],
+        "supported_formats": ["pdf", "doc", "docx", "xlsx", "xls", "txt", "md", "json"],
         "max_file_size": 100 * 1024 * 1024,  # 100MB
         "ocr_enabled": True,
         "extract_images": False

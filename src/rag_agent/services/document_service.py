@@ -13,6 +13,7 @@ from ..parsers.pdf_parser import PDFParser
 from ..parsers.text_parser import TextParser
 from ..parsers.docx_parser import DocxParser
 from ..parsers.excel_parser import ExcelParser
+from .text_parsing_service import TextParsingService
 
 
 class DocumentService:
@@ -29,6 +30,8 @@ class DocumentService:
         self.text_parser = TextParser(str(self.pages_dir))
         self.docx_parser = DocxParser(str(self.pages_dir))
         self.excel_parser = ExcelParser(str(self.pages_dir))
+        # 初始化文本解析服务
+        self.text_parsing_service = TextParsingService(db)
     
     def upload_document(self, file, name: Optional[str] = None) -> Document:
         """上传文档"""
@@ -68,13 +71,19 @@ class DocumentService:
         # 保存到数据库
         if self.db.create_document(document):
             # 如果文件支持转换为图片，异步转换为图片（后台处理）
-            if file_ext in ['pdf', 'txt', 'md', 'json', 'py', 'js', 'ts', 'html', 'css', 'docx', 'xlsx', 'xls']:
+            if file_ext in ['pdf', 'txt', 'md', 'json', 'py', 'js', 'ts', 'html', 'css', 'docx', 'xlsx', 'xls', 'pptx', 'ppt']:
                 import threading
                 document.status = DocumentStatus.PROCESSING
                 self.db.update_document(document)
-                # 在后台线程中处理
+                # 在后台线程中处理图片转换
                 thread = threading.Thread(target=self._convert_document_to_images, args=(document,), daemon=True)
                 thread.start()
+            
+            # 异步解析文本（支持所有格式）
+            if file_ext in ['pdf', 'doc', 'docx', 'txt', 'md', 'json', 'xlsx', 'xls']:
+                # 启动文本解析（并发控制由 TextParsingService 管理）
+                self.text_parsing_service.parse_document_async(document)
+            
             return document
         raise Exception("保存文档到数据库失败")
     
@@ -140,10 +149,22 @@ class DocumentService:
                     format=page_info.get('format', 'png')
                 )
             
-            # 更新文档的总页数和状态
+            # 更新文档的总页数
             document.total_pages = len(pages_info)
-            document.status = DocumentStatus.COMPLETED
-            document.parsed_at = datetime.now()
+            
+            # 检查文本解析是否已完成
+            parsed_text = self.db.get_parsed_text(document.id, page_number=None)
+            if parsed_text:
+                # 文本解析已完成，更新状态为 completed
+                document.status = DocumentStatus.COMPLETED
+                document.parsed_at = datetime.now()
+                print(f"[DocumentService] ✅ 图片转换完成，文本解析也已完成，状态更新为 completed: {document.id}")
+            else:
+                # 文本解析还在进行中，保持 processing 状态
+                # 文本解析完成后会更新状态
+                print(f"[DocumentService] 图片转换完成，等待文本解析完成: {document.id}")
+            
+            document.updated_at = datetime.now()
             self.db.update_document(document)
             
             print(f"[DocumentService] 成功转换 {len(pages_info)} 页图片")
@@ -254,4 +275,5 @@ class DocumentService:
         """
         # TODO: 统计并更新切片数量
         pass
+
 

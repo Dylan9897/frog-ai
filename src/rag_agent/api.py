@@ -5,6 +5,7 @@ RAG Agent API 路由
 from flask import Blueprint, request, jsonify
 from .database import DatabaseManager
 from .services.document_service import DocumentService
+from .services.text_parsing_service import TextParsingService
 from .models import DocumentStatus
 
 # 创建蓝图
@@ -13,6 +14,7 @@ rag_bp = Blueprint('rag', __name__, url_prefix='/api/rag')
 # 初始化服务
 _db = DatabaseManager()
 _doc_service = DocumentService(_db)
+_text_parsing_service = TextParsingService(_db)
 
 
 # ==================== 文档管理接口 ====================
@@ -216,14 +218,110 @@ def get_parsed_text(document_id: str):
     """
     获取解析后的文本流
     查询参数:
-      - page: 页码（可选）
+      - page: 页码（可选，对 PDF 有效；其他类型忽略）
     输出: {
       "success": bool,
-      "parsed_text": ParsedText.to_dict()
+      "content": str,  # Markdown 文本
+      "page_number": int or null
     }
     """
-    # TODO: 实现解析文本获取
-    pass
+    try:
+        # 先获取文档信息，用于判断类型
+        document = _doc_service.get_document(document_id)
+        if not document:
+            return jsonify({
+                "success": False,
+                "error": "文档未找到"
+            }), 404
+
+        page = request.args.get('page', type=int)
+
+        # 对于非 PDF 文档，忽略 page 参数，直接返回整篇解析结果
+        if document.file_type.lower() != "pdf":
+            page = None
+
+        content = _text_parsing_service.get_parsed_text(document_id, page)
+
+        if content:
+            return jsonify({
+                "success": True,
+                "content": content,
+                "page_number": page
+            }), 200
+        else:
+            return jsonify({
+                "success": False,
+                "error": "解析文本未找到",
+                "content": "",
+                "page_number": page
+            }), 404
+    except Exception as e:
+        print(f"[API] 获取解析文本失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@rag_bp.route('/documents/<document_id>/parsed-text/stream', methods=['GET'])
+def stream_parsed_text(document_id: str):
+    """
+    流式获取解析后的文本（用于 PDF 实时显示）
+    查询参数:
+      - page: 页码（必需）
+    输出: Server-Sent Events (SSE) 流
+    """
+    from flask import Response, stream_with_context
+    
+    try:
+        page = request.args.get('page', type=int)
+        if not page:
+            return jsonify({"success": False, "error": "缺少 page 参数"}), 400
+        
+        # 获取文档信息
+        document = _doc_service.get_document(document_id)
+        if not document:
+            return jsonify({"success": False, "error": "文档未找到"}), 404
+        
+        # 如果是 PDF，使用流式解析
+        if document.file_type.lower() == 'pdf':
+            def generate():
+                from src.rag_agent.parsers.pdf_vl_parser import PDFVLParser
+                parser = PDFVLParser()
+                
+                for chunk in parser.parse_page_stream(str(document.file_path), page):
+                    # 确保chunk是字符串
+                    chunk_str = chunk if isinstance(chunk, str) else str(chunk)
+                    yield f"data: {chunk_str}\n\n"
+            
+            return Response(
+                stream_with_context(generate()),
+                mimetype='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'X-Accel-Buffering': 'no'
+                }
+            )
+        else:
+            # 非 PDF 文件，直接返回已解析的文本
+            content = _text_parsing_service.get_parsed_text(document_id, page)
+            if content:
+                def generate():
+                    yield f"data: {content}\n\n"
+                
+                return Response(
+                    stream_with_context(generate()),
+                    mimetype='text/event-stream'
+                )
+            else:
+                return jsonify({"success": False, "error": "解析文本未找到"}), 404
+    except Exception as e:
+        print(f"[API] 流式获取解析文本失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @rag_bp.route('/documents/<document_id>/parse', methods=['POST'])
