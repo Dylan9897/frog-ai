@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aether Cortex | Task Scheduler</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Inter 字体，在专业暗黑 UI 中保证极佳的易读性 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* --- 1. Deep Space Design System --- */
+        :root {
+            /* Palette: Deep & Rich Dark Theme */
+            --bg-main: #1c102a;        /* 主背景：深紫黑，避免纯黑的压抑感 */
+            --bg-secondary: #2a1b3d;   /* 卡片背景：略浅的紫黑，增加层次 */
+            --bg-surface: #3b2c52;     /* 输入框/元素背景 */
+
+            /* Text Colors */
+            --text-primary: #f0f0f0;   /* 主文本：亮白，高对比度 */
+            --text-secondary: #c9c9c9; /* 副文本：浅灰 */
+            --text-muted: #8e8e8e;     /* 辅助信息 */
+
+            /* Accent Colors */
+            --accent-primary: #9f7aea;  /* 主色：皇家紫，代表科技与智慧 */
+            --accent-secondary: #00bcd4;/* 辅色：青色/湖蓝，用于高亮和进度 */
+            --accent-gradient: linear-gradient(90deg, #9f7aea, #845ef7);
+
+            /* 3D Shadows & Depth */
+            /* 内部阴影：用于输入框，使其看起来凹陷 */
+            --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+            /* 外部阴影：用于卡片，使其看起来悬浮 */
+            --shadow-float: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 10px rgba(159, 122, 234, 0.2);
+            /* 按钮激活/Hover 阴影 */
+            --shadow-button: 0 4px 10px rgba(159, 122, 234, 0.5);
+        }
+
+        /* --- 2. Global Styling --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+            font-size: 14px;
+
+            /* 背景动画设置 */
+            background: var(--bg-main);
+            background-size: 400% 400%; /* 确保渐变能够充分移动 */
+            animation: subtleMove 120s infinite alternate; /* 缓慢移动动画 */
+
+            /* 动态背景：星云和星点效果 */
+            background-image:
+                /* 柔和的星点 (Soft Star Field) */
+                radial-gradient(circle at 10% 10%, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+                radial-gradient(circle at 90% 90%, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+                radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+                /* 缓慢漂移的星云渐变 (Nebula Gradient) */
+                radial-gradient(circle at 120% 120%, rgba(159, 122, 234, 0.1) 5%, transparent 60%),
+                radial-gradient(circle at -20% -20%, rgba(0, 188, 212, 0.1) 5%, transparent 60%),
+                var(--bg-main); /* 基色 */
+        }
+
+        /* 背景动画关键帧 */
+        @keyframes subtleMove {
+            0% { background-position: 0% 0%; }
+            100% { background-position: 100% 100%; }
+        }
+
+        /* --- 3. App Layout --- */
+        .sidebar {
+            width: 250px;
+            background: var(--bg-secondary);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 24px;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .brand {
+            display: flex; align-items: center; gap: 12px;
+            font-size: 20px; font-weight: 700;
+            color: var(--accent-primary);
+            margin-bottom: 40px;
+            letter-spacing: -0.5px;
+            text-shadow: 0 0 8px rgba(159, 122, 234, 0.5); /* 霓虹光晕 */
+        }
+        .brand-logo {
+            width: 36px; height: 36px; background: var(--accent-gradient);
+            color: white; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+        }
+
+        .nav-menu { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+        .nav-item {
+            padding: 12px 16px; border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer; transition: all 0.2s;
+            font-weight: 500; display: flex; align-items: center; gap: 12px;
+            background: var(--bg-secondary); /* Base element is part of the card */
+            border: 1px solid transparent;
+            box-shadow: var(--shadow-inner);
+        }
+        .nav-item:hover { color: var(--text-primary); background: var(--bg-surface); }
+        .nav-item.active {
+            color: var(--accent-secondary);
+            background: var(--bg-surface);
+            border-color: var(--accent-secondary);
+            box-shadow: 0 0 5px rgba(0, 188, 212, 0.5); /* 激活光晕 */
+        }
+
+        .main-content {
+            flex: 1; display: flex; flex-direction: column; overflow: hidden;
+        }
+
+        .content-scroll {
+            flex: 1; padding: 40px; overflow-y: auto;
+        }
+
+        /* --- 4. 3D Components: Cards, Headers & Buttons --- */
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: var(--shadow-float);
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 30px;
+            transition: all 0.3s;
+        }
+
+        .section-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 30px;
+        }
+        .header-text h1 { font-size: 32px; font-weight: 700; color: var(--accent-primary); margin-bottom: 4px; letter-spacing: -1px; }
+        .header-text p { color: var(--text-secondary); }
+
+        /* Button Styling - Raised and Actionable */
+        .btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 12px 24px; border-radius: 10px;
+            font-size: 15px; font-weight: 600;
+            border: none; cursor: pointer; transition: all 0.2s;
+            box-shadow: 0 3px 0 0 rgba(0, 0, 0, 0.2); /* 3D effect shadow */
+        }
+        .btn-primary {
+            background: var(--accent-primary); color: white;
+            box-shadow: var(--shadow-button);
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(159, 122, 234, 0.6);
+        }
+        .btn-secondary {
+            background: var(--bg-surface); color: var(--text-secondary);
+            border: 1px solid var(--accent-secondary);
+            box-shadow: 0 0 5px rgba(0, 188, 212, 0.2);
+        }
+        .btn-secondary:hover { background: var(--bg-main); color: var(--text-primary); }
+
+        /* --- 5. Scheduler Table --- */
+        .table { width: 100%; border-collapse: collapse; }
+        .table th {
+            text-align: left; padding: 18px 24px;
+            background: rgba(0, 0, 0, 0.1);
+            color: var(--text-muted);
+            font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .table td {
+            padding: 18px 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            color: var(--text-secondary);
+        }
+        .table tbody tr:last-child td { border-bottom: none; }
+        .clickable-row { cursor: pointer; }
+        .clickable-row:hover { background: rgba(0, 0, 0, 0.15); }
+
+        /* Status Badge */
+        .badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 12px; border-radius: 9999px;
+            font-size: 12px; font-weight: 600;
+            text-transform: uppercase;
+        }
+        .badge.completed { background: #1f422a; color: #4ade80; border: 1px solid #4ade8055; }
+        .badge.running { background: #1c3d5a; color: #38bdf8; border: 1px solid #38bdf855; }
+        .badge.pending { background: #372d42; color: var(--accent-primary); border: 1px solid var(--accent-primary)55; }
+
+        /* Progress Bar - Glowing Effect */
+        .progress-container { width: 120px; height: 8px; background: var(--bg-surface); border-radius: 4px; overflow: hidden; box-shadow: var(--shadow-inner); }
+        .progress-bar {
+            height: 100%; background: var(--accent-gradient);
+            border-radius: 4px; transition: width 0.4s ease;
+            box-shadow: 0 0 8px var(--accent-secondary); /* 进度条光晕 */
+        }
+
+        /* --- 6. 3D Form Styling (Create Task) --- */
+        .form-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; padding: 30px; }
+        .form-group { margin-bottom: 28px; }
+        .form-label { display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 10px; }
+        .form-helper { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; display: block; }
+
+        /* 凹陷的输入框 */
+        .form-input, .form-select {
+            width: 100%; padding: 12px 16px; font-size: 15px;
+            border: 1px solid var(--bg-surface); border-radius: 8px;
+            color: var(--text-primary); transition: 0.2s;
+            background: var(--bg-surface);
+            box-shadow: var(--shadow-inner);
+        }
+        .form-input:focus, .form-select:focus {
+            border-color: var(--accent-secondary);
+            box-shadow: var(--shadow-inner), 0 0 8px rgba(0, 188, 212, 0.5);
+        }
+
+        /* Selection Cards - The "Button" Look */
+        .selection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
+        .selection-card {
+            background: var(--bg-surface);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px; padding: 16px;
+            cursor: pointer; transition: 0.2s;
+            text-align: center; color: var(--text-secondary);
+            box-shadow: 0 4px 0 0 rgba(0, 0, 0, 0.2); /* 3D 抬升感 */
+        }
+        .selection-card:hover { transform: translateY(-1px); }
+        .selection-card.selected {
+            background: var(--accent-primary);
+            color: white;
+            border-color: var(--accent-secondary);
+            box-shadow: 0 2px 0 0 rgba(0, 0, 0, 0.3), 0 0 10px rgba(159, 122, 234, 0.5); /* 按下和发光 */
+            transform: translateY(0); /* 看起来被按下去了一点 */
+        }
+
+        /* View Switching (keep simple) */
+        .view-section { display: none; }
+        .view-section.active { display: block; animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* Paper List Scrolling Wrapper */
+        .paper-list-scroll-wrapper {
+            max-height: 60vh; /* 设置最大高度，超过此高度则出现滚动条 */
+            overflow-y: auto;
+            padding-right: 8px; /* 为滚动条留出空间 */
+        }
+
+        /* Custom Scrollbar Styling for Dark Mode */
+        .paper-list-scroll-wrapper::-webkit-scrollbar {
+            width: 8px;
+        }
+        .paper-list-scroll-wrapper::-webkit-scrollbar-thumb {
+            background-color: var(--bg-surface);
+            border-radius: 4px;
+        }
+        .paper-list-scroll-wrapper::-webkit-scrollbar-track {
+            background-color: var(--bg-secondary);
+        }
+
+        /* Paper List - Enhanced Readability */
+        .paper-item {
+            padding: 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex; justify-content: space-between; align-items: flex-start;
+            transition: background 0.2s;
+        }
+        .paper-item:hover { background: rgba(0, 0, 0, 0.1); }
+        .paper-item:last-child { border-bottom: none; }
+        .paper-info h3 { font-size: 18px; font-weight: 600; color: var(--accent-secondary); margin-bottom: 6px; line-height: 1.4; }
+        .paper-meta { font-size: 13px; color: var(--text-secondary); display: flex; gap: 16px; align-items: center; }
+        .tag { background: var(--bg-surface); padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 500; color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-logo"><i class="fas fa-satellite-dish"></i></div>
+            Aether Cortex
+        </div>
+        <ul class="nav-menu">
+            <li class="nav-item active" onclick="switchView('scheduler', this)">
+                <i class="fas fa-list-check"></i> 任务调度中心
+            </li>
+            <li class="nav-item" onclick="switchView('create', this)">
+                <i class="fas fa-plus-circle"></i> 新建任务
+            </li>
+            <li class="nav-item" onclick="alert('功能开发中：数据可视化')">
+                <i class="fas fa-chart-line"></i> 数据洞察
+            </li>
+        </ul>
+
+        <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+            <div class="nav-item" onclick="alert('设置面板')">
+                <i class="fas fa-cog"></i> 系统配置
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Content Area -->
+        <div class="content-scroll">
+
+            <!-- VIEW 1: SCHEDULER -->
+            <div id="view-scheduler" class="view-section active">
+                <div class="section-header">
+                    <div class="header-text">
+                        <h1>任务调度中心</h1>
+                        <p>实时监控所有爬虫进程。点击任务 ID 查看详细报告。</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="switchView('create', document.querySelectorAll('.nav-item')[1])">
+                        <i class="fas fa-rocket"></i> 启动新任务
+                    </button>
+                </div>
+
+                <div class="card">
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>任务 ID</th>
+                                    <th>搜索关键词</th>
+                                    <th>目标来源</th>
+                                    <th>状态</th>
+                                    <th>进度</th>
+                                    <th>爬取数量</th>
+                                    <th style="text-align: right;">创建时间</th>
+                                </tr>
+                            </thead>
+                            <tbody id="task-table-body">
+                                <!-- JS will populate this -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 2: CREATE TASK - 极具立体感的控制面板 -->
+            <div id="view-create" class="view-section">
+                <div class="section-header">
+                    <div class="header-text">
+                        <h1>新建数据流任务</h1>
+                        <p>配置参数并注入到核心调度器。</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="form-layout">
+                        <!-- Left: Main Form -->
+                        <div class="form-main">
+                            <div class="form-group">
+                                <label class="form-label"><i class="fas fa-key"></i> 核心关键词 (Keywords)</label>
+                                <span class="form-helper">输入主要搜索向量，例如：LLM, RAG, NeRF...</span>
+                                <input type="text" class="form-input" id="input-kw" placeholder="请输入关键词">
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label"><i class="fas fa-graduation-cap"></i> 目标知识源 (Sources)</label>
+                                <span class="form-helper">选择目标会议或期刊，可多选。</span>
+                                <div class="selection-grid" id="source-grid">
+                                    <div class="selection-card selected" onclick="toggleSelection(this)">ACL 2024</div>
+                                    <div class="selection-card" onclick="toggleSelection(this)">NeurIPS</div>
+                                    <div class="selection-card" onclick="toggleSelection(this)">ICML</div>
+                                    <div class="selection-card" onclick="toggleSelection(this)">CVPR</div>
+                                    <div class="selection-card" onclick="toggleSelection(this)">ArXiv (CS)</div>
+                                    <div class="selection-card" onclick="toggleSelection(this)">Nature AI</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right: Quick Settings -->
+                        <div class="form-side">
+                             <div class="form-group">
+                                <label class="form-label"><i class="fas fa-filter"></i> 文章类型过滤</label>
+                                <select class="form-select" id="input-type">
+                                    <option>Long Paper (Main Track)</option>
+                                    <option>Short Paper</option>
+                                    <option>Demo / Workshop</option>
+                                    <option>所有类型</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label"><i class="fas fa-sort-numeric-up-alt"></i> 结果上限</label>
+                                <input type="number" class="form-input" value="500">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label"><i class="fas fa-calendar-alt"></i> 年份范围</label>
+                                <div style="display: flex; gap: 10px;">
+                                    <input type="number" class="form-input" value="2024">
+                                    <span style="align-self: center; color: var(--text-muted);">-</span>
+                                    <input type="number" class="form-input" value="2025">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="padding: 0 30px 30px 30px; border-top: 1px solid rgba(255, 255, 255, 0.05);">
+                        <button class="btn btn-primary" style="margin-top: 20px;" onclick="createTask()">
+                            <i class="fas fa-bolt"></i> 启动核心爬虫序列
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 3: RESULTS (Paper List) -->
+            <div id="view-results" class="view-section">
+                <button class="btn btn-secondary" onclick="switchView('scheduler', document.querySelectorAll('.nav-item')[0])" style="margin-bottom: 20px;">
+                    <i class="fas fa-arrow-left"></i> 返回任务列表
+                </button>
+
+                <div class="section-header">
+                    <div class="header-text">
+                        <h1 id="result-title">任务报告：[ID]</h1>
+                        <p id="result-meta">已完成数据实体抽取。共计 124 篇论文。</p>
+                    </div>
+                    <div style="display: flex; gap: 12px;">
+                        <button class="btn btn-secondary"><i class="fas fa-download"></i> 导出 CSV</button>
+                        <button class="btn btn-primary"><i class="fas fa-file-pdf"></i> 生成摘要报告</button>
+                    </div>
+                </div>
+
+                <!-- 新增：论文搜索/筛选框 -->
+                <div style="margin-bottom: 20px;">
+                    <label class="form-label" for="paper-search-input"><i class="fas fa-search"></i> 筛选结果</label>
+                    <input type="text" class="form-input" id="paper-search-input"
+                           placeholder="输入标题、作者或会议名进行快速搜索..."
+                           oninput="filterPapers(this.value)">
+                </div>
+
+                <div class="card">
+                    <!-- 滚动条容器：设置 max-height 和 overflow-y: auto -->
+                    <div class="paper-list-scroll-wrapper">
+                        <div id="paper-list-container">
+                            <!-- Paper items -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // --- Data ---
+        const tasks = [
+            { id: 'MSN-901-A', kw: 'Reinforcement Learning', src: 'NeurIPS', status: 'completed', progress: 100, count: 342, date: '2025-12-05' },
+            { id: 'MSN-902-B', kw: 'Diffusion Models', src: 'CVPR, ICCV', status: 'running', progress: 65, count: 0, date: '2025-12-04' },
+            { id: 'MSN-903-C', kw: 'Generative Agents', src: 'ACL', status: 'pending', progress: 0, count: 0, date: '2025-12-03' },
+        ];
+
+        // 基础论文数据
+        const papersMockBase = [
+            { title: "Training Models with Human Feedback", authors: "Ouyang et al.", year: "2024", conf: "NeurIPS", track: "Oral" },
+            { title: "Constitutional AI: Harmlessness from AI Feedback", authors: "Anthropic Research", year: "2024", conf: "NeurIPS", track: "Main" },
+            { title: "High-Resolution Image Synthesis with Latent Diffusion Models", authors: "Rombach et al.", year: "2023", conf: "CVPR", track: "Highlight" },
+            { title: "LoRA: Low-Rank Adaptation of Large Language Models", authors: "Hu et al.", year: "2024", conf: "ICLR", track: "Main" },
+            { title: "Attention Is All You Need", authors: "Vaswani et al.", year: "2017", conf: "NeurIPS", track: "Main" },
+            { title: "Stable Diffusion: Semantic Image Synthesis", authors: "Ramesh et al.", year: "2024", conf: "CVPR", track: "Oral" },
+        ];
+
+        // 扩展论文数据，确保列表足够长以便滚动条可见
+        const papersMock = [...papersMockBase, ...papersMockBase, ...papersMockBase, ...papersMockBase, ...papersMockBase, ...papersMockBase, ...papersMockBase, ...papersMockBase];
+
+        // 全局状态：当前展示的论文列表（用于搜索）
+        let currentPapers = papersMock;
+
+        // --- Logic ---
+
+        function init() {
+            renderScheduler();
+        }
+
+        function switchView(viewId, navEl) {
+            // Nav styling
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            if(navEl) navEl.classList.add('active');
+
+            // View switching
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            document.getElementById(`view-${viewId}`).classList.add('active');
+        }
+
+        function toggleSelection(el) {
+            el.classList.toggle('selected');
+        }
+
+        function renderScheduler() {
+            const tbody = document.getElementById('task-table-body');
+            tbody.innerHTML = '';
+
+            tasks.forEach(t => {
+                const tr = document.createElement('tr');
+                tr.className = t.status === 'completed' ? 'clickable-row' : '';
+                if(t.status === 'completed') {
+                    tr.onclick = (e) => showResults(t);
+                }
+
+                // Badges
+                let badgeClass = t.status === 'completed' ? 'completed' : (t.status === 'running' ? 'running' : 'pending');
+                let statusIcon = t.status === 'completed' ? '<i class="fas fa-check"></i>' : (t.status === 'running' ? '<i class="fas fa-sync fa-spin"></i>' : '<i class="far fa-clock"></i>');
+                let statusLabel = t.status === 'completed' ? 'COMPLETED' : (t.status === 'running' ? 'RUNNING' : 'PENDING');
+
+                tr.innerHTML = `
+                    <td style="font-family: monospace; color: var(--accent-secondary); font-weight: 500;">${t.id}</td>
+                    <td style="font-weight: 500;">${t.kw}</td>
+                    <td><span class="tag" style="background: var(--bg-surface);">${t.src}</span></td>
+                    <td><span class="badge ${badgeClass}">${statusIcon} ${statusLabel}</span></td>
+                    <td>
+                        <div class="progress-container">
+                            <div class="progress-bar" style="width: ${t.progress}%"></div>
+                        </div>
+                    </td>
+                    <td style="color: var(--text-primary);">${t.status === 'completed' ? t.count + ' 篇' : '-'}</td>
+                    <td style="text-align: right; color: var(--text-muted);">${t.date}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function createTask() {
+            const btn = document.querySelector('#view-create .btn-primary');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在注入调度器...';
+
+            setTimeout(() => {
+                const kw = document.getElementById('input-kw').value || 'New Mission Vector';
+                // Add new task
+                tasks.unshift({
+                    id: `MSN-${Math.floor(Math.random()*900)+100}-X`,
+                    kw: kw,
+                    src: 'Selected Sources',
+                    status: 'running',
+                    progress: 10,
+                    count: 0,
+                    date: new Date().toISOString().slice(0, 10)
+                });
+                renderScheduler();
+                switchView('scheduler', document.querySelectorAll('.nav-item')[0]);
+                btn.innerHTML = originalText;
+
+                // Simulate progress
+                let p = 10;
+                const newTask = tasks[0];
+                const intv = setInterval(() => {
+                    if (p < 90) p += 5;
+                    newTask.progress = p;
+                    if(p >= 90 && Math.random() < 0.2) {
+                        newTask.progress = 100;
+                        newTask.status = 'completed';
+                        newTask.count = Math.floor(Math.random() * 200) + 50;
+                        clearInterval(intv);
+                    }
+                    renderScheduler();
+                }, 1000);
+            }, 1000);
+        }
+
+        // 渲染论文列表的通用函数
+        function renderPaperList(papers) {
+            const container = document.getElementById('paper-list-container');
+            container.innerHTML = '';
+
+            if (papers.length === 0) {
+                 container.innerHTML = '<p style="padding: 24px; text-align: center; color: var(--text-muted);">未找到符合条件的论文。</p>';
+                 return;
+            }
+
+            papers.forEach(p => {
+                const item = document.createElement('div');
+                item.className = 'paper-item';
+                item.innerHTML = `
+                    <div class="paper-info">
+                        <h3>${p.title}</h3>
+                        <div class="paper-meta">
+                            <span><i class="far fa-user"></i> ${p.authors}</span>
+                            <span class="tag">${p.conf} ${p.year}</span>
+                            <span class="tag" style="color: var(--accent-secondary); border-color: var(--accent-secondary)55;">${p.track}</span>
+                        </div>
+                    </div>
+                    <div class="paper-actions">
+                        <button class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;">
+                            <i class="fas fa-file-pdf"></i> 下载 PDF
+                        </button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function showResults(task) {
+            document.getElementById('result-title').innerText = `任务报告: ${task.id} (${task.kw})`;
+            document.getElementById('result-meta').innerText = `来源: ${task.src} | 报告生成于 ${task.date} | 共计 ${task.count} 篇论文`;
+
+            // 每次进入结果页，重置当前论文列表并清空搜索框
+            currentPapers = papersMock;
+            const searchInput = document.getElementById('paper-search-input');
+            if (searchInput) {
+                 searchInput.value = '';
+            }
+
+            renderPaperList(currentPapers);
+            switchView('results', null);
+        }
+
+        // 论文筛选逻辑
+        function filterPapers(searchTerm) {
+            const lowerCaseTerm = searchTerm.toLowerCase().trim();
+
+            if (!lowerCaseTerm) {
+                renderPaperList(currentPapers); // 搜索词为空时，显示所有论文
+                return;
+            }
+
+            // 根据标题、作者或会议名进行模糊搜索
+            const filtered = currentPapers.filter(p =>
+                p.title.toLowerCase().includes(lowerCaseTerm) ||
+                p.authors.toLowerCase().includes(lowerCaseTerm) ||
+                p.conf.toLowerCase().includes(lowerCaseTerm)
+            );
+
+            renderPaperList(filtered);
+        }
+
+        // Init
+        init();
+
+    </script>
+</body>
+</html>

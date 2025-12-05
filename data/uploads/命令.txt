@@ -1,0 +1,59 @@
+taskkill /F /IM python.exe
+
+阿里云（一）
+139.224.69.14
+root/Xinxie01!
+
+阿里云（二）
+47.100.85.29
+root/IUIcity88
+
+samsum和DialogSum数据集
+（1）Compositional Data Augmentation for Abstractive Conversation Summarization.
+（2）Human-in-the-loop Abstractive Dialogue Summarization.
+（3）Dialogue Summarization with Static-Dynamic Structure Fusion Graph. 
+
+https://aclanthology.org/2025.findings-emnlp.793.pdf
+https://aclanthology.org/2025.findings-naacl.404.pdf
+
+
+samsum:
+######################################
+Summarize the following dialogue in one or two concise, objective sentences. Focus only on the key information and outcome. Do not include speaker roles, quotes, or conversational details.
+
+Dialogue: {dialogue}
+
+Summary:
+######################################
+dialogsum:
+######################################
+Write a brief, factual summary of the conversation below. Capture the main issue and resolution in a single sentence if possible. Avoid paraphrasing the dialogue turn-by-turn or using direct speech.
+
+Dialogue: {dialogue}
+
+Summary:
+######################################
+
+
+csds
+（1）Get To The Point: Summarization with Pointer-Generator Networks. 
+（2）Fast Abstractive Summarization with Reinforce-Selected Sentence Rewriting.
+（3）Text Summarization with Pretrained Encoders. 
+（4）Topic-Oriented Spoken Dialogue Summarization for Customer Service with Saliency-Aware Topic Modeling.
+（5）Towards Modeling Role-Aware Centrality for Dialogue Summarization.
+（6）Enhancing Dialogue Summarization with Topic-Aware Global- and Local- Level Centrality. 
+
+请用一句话概括以下客服对话的核心问题与解决方案，采用“用户...，客服...”的客观陈述句式，不要复述对话过程，不要使用引号或语气词。
+
+对话：{dialogue}
+
+摘要：
+
+
+mc
+（1）Summarizing Medical Conversations via Identifying Important Utterances.
+（2）Other Roles Matter! Enhancing Role-Oriented Dialogue Summarization via Role Interactions. 
+（3）Towards Modeling Role-Aware Centrality for Dialogue Summarization.
+（4）Enhancing Dialogue Summarization with Topic-Aware Global- and Local- Level Centrality. 
+
+
